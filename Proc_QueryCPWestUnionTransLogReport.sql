@@ -1,3 +1,5 @@
+--[2011-07-26] Modified by Chen wu  Fix Logic Error  "RespCode in ('100', '200')"
+
 if OBJECT_ID(N'Proc_QueryCPWestUnionTransLogReport', N'P') is not null
 begin
 	drop procedure Proc_QueryCPWestUnionTransLogReport;
@@ -100,9 +102,7 @@ where
 	and
 	TransDate < @CurrEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';		
+	RespCode in ('100', '200');		
 
 --4. Get Previous Data
 select
@@ -117,9 +117,7 @@ where
 	and
 	TransDate < @PrevEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';	
+	RespCode in ('100', '200');		
 	
 --5. Get LastYearData
 select
@@ -134,9 +132,7 @@ where
 	and
 	TransDate < @LastYearEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';			
+	RespCode in ('100', '200');			
 
 
 --6. GetThisYearRunningData
@@ -152,9 +148,7 @@ where
 	and
 	TransDate < @ThisYearRunningEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';	
+	RespCode in ('100', '200');	
 	
 --7. Get Result
 select
