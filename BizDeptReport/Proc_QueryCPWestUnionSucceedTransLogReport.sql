@@ -1,21 +1,21 @@
-if OBJECT_ID(N'Proc_QueryCPWestUnionTransLogReport', N'P') is not null
+if OBJECT_ID(N'Proc_QueryCPWestUnionSucceedTransLogReport', N'P') is not null
 begin
-	drop procedure Proc_QueryCPWestUnionTransLogReport;
+	drop procedure Proc_QueryCPWestUnionSucceedTransLogReport;
 end
 go
 
 
-Create Procedure Proc_QueryCPWestUnionTransLogReport
-    @StartDate datetime = '2011-07-01',
+Create Procedure Proc_QueryCPWestUnionSucceedTransLogReport
+    @StartDate datetime = '2011-06-01',
     @PeriodUnit nChar(3) = N'自定义',
-    @EndDate datetime = '2011-07-19'
+    @EndDate datetime = '2011-06-30'
 as
 begin
 
 --1. Check Input
 if (@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin 
-      raiserror(N'Input params cannot be empty in Proc_QueryCPWestUnionTransLogReport',16,1);
+      raiserror(N'Input params cannot be empty in Proc_QueryCPWestUnionSucceedTransLogReport',16,1);
 end
 
 --2. Prepare StartDate and EndDate
@@ -100,9 +100,8 @@ where
 	and
 	TransDate < @CurrEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';		
+	RespCode in ('100','200');
+	
 
 --4. Get Previous Data
 select
@@ -117,9 +116,7 @@ where
 	and
 	TransDate < @PrevEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';	
+	RespCode in ('100','200');	
 	
 --5. Get LastYearData
 select
@@ -134,9 +131,7 @@ where
 	and
 	TransDate < @LastYearEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';			
+	RespCode in ('100','200');		
 
 
 --6. GetThisYearRunningData
@@ -152,9 +147,7 @@ where
 	and
 	TransDate < @ThisYearRunningEndDate
 	and
-	RespCode = '100'
-	or
-	RespCode = '200';	
+	RespCode in ('100','200');	
 	
 --7. Get Result
 select
