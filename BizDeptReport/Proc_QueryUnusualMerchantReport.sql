@@ -5,8 +5,8 @@ end
 go
 
 create procedure Proc_QueryUnusualMerchantReport
-	@StartDate as datetime = '2011-01-01',
-	@PeriodUnit as nchar(2) = N'周',
+	@StartDate as datetime = '2011-07-01',
+	@PeriodUnit as nchar(2) = N'月',
 	@MonthPeriod as tinyint = 2,
 	@TopNum as smallint	 = 120
 as
@@ -179,7 +179,9 @@ from
 	left join
 	DimMerchant
 	on
-		UnusualMerchant.MerchantNo = DimMerchant.MerchantNo;
+		UnusualMerchant.MerchantNo = DimMerchant.MerchantNo
+where
+	DimMerchant.MerchantName not like '%基金管理%';
 		
 --8. Clear temp tables
 drop table #UnusualMerchantList;
