@@ -5,9 +5,9 @@ end
 go
 
 create procedure Proc_QueryBizCategoryReport
-	@StartDate datetime = '2011-01-01',
-	@PeriodUnit nchar(2) = N'周',
-	@BizCategory nchar(10) = N'基金（支付）'
+	@StartDate datetime = '2011-07-01',
+	@PeriodUnit nchar(2) = N'月',
+	@BizCategory nchar(10) = N'代付'
 as
 begin
 
@@ -119,6 +119,10 @@ begin
 	MerchantNo in (select MerchantNo from dbo.Table_InstuMerInfo where InstuNo = ''000020100816001'')
 	'
 end
+else if @BizCategory = N'代付'
+begin
+	set @whereCondition = N''
+end
 
 declare @sqlScript nvarchar(max);
 --3. Get Current period data
@@ -129,25 +133,38 @@ create table #CurrTransSum
 	SucceedAmount bigint not null
 );
 
-set @sqlScript = N'
-select
-	MerchantNo,
-	sum(SucceedTransCount) as SucceedCount,
-	sum(SucceedTransAmount) as SucceedAmount
-from
-	FactDailyTrans
-where
-	DailyTransDate >= ''' + convert(char(10), @CurrStartDate, 120) + ''' 
-	and
-	DailyTransDate < ''' + convert(char(10), @CurrEndDate, 120) + ''''
-+ case when
-		isnull(@whereCondition, N'') <> N''
-	then
-		N' and ' + @whereCondition
+set @sqlScript = 
+	case @BizCategory when N'代付'
+	then 
+		N'select
+			MerchantNo,
+			sum(TransCount) as SucceedCount,
+			sum(TransAmount) as SucceedAmount
+		from
+			Table_OraTransSum
+		where
+			CPDate >= ''' + convert(char(10), @CurrStartDate, 120) + ''' 
+			and
+			CPDate < ''' + convert(char(10), @CurrEndDate, 120) + ''''
 	else
-		''
-	end
-+ N' group by MerchantNo'
+		N'select
+			MerchantNo,
+			sum(SucceedTransCount) as SucceedCount,
+			sum(SucceedTransAmount) as SucceedAmount
+		from
+			FactDailyTrans
+		where
+			DailyTransDate >= ''' + convert(char(10), @CurrStartDate, 120) + ''' 
+			and
+			DailyTransDate < ''' + convert(char(10), @CurrEndDate, 120) + '''' end
+	+ case when
+			isnull(@whereCondition, N'') <> N''
+		then
+			N' and ' + @whereCondition
+		else
+			''
+		end
+	+ N' group by MerchantNo'
 
 insert into #CurrTransSum
 (
@@ -165,25 +182,38 @@ create table #PrevTransSum
 	SucceedAmount bigint not null
 );
 
-set @sqlScript = N'
-select
-	MerchantNo,
-	sum(SucceedTransCount) as SucceedCount,
-	sum(SucceedTransAmount) as SucceedAmount
-from
-	FactDailyTrans
-where
-	DailyTransDate >= ''' + convert(char(10), @PrevStartDate, 120) + ''' 
-	and
-	DailyTransDate < ''' + convert(char(10), @PrevEndDate, 120) + ''''
-+ case when
-		isnull(@whereCondition, N'') <> N''
-	then
-		N' and ' + @whereCondition
+set @sqlScript = 
+	case @BizCategory when N'代付'
+	then 
+		N'select
+			MerchantNo,
+			sum(TransCount) as SucceedCount,
+			sum(TransAmount) as SucceedAmount
+		from
+			Table_OraTransSum
+		where
+			CPDate >= ''' + convert(char(10), @PrevStartDate, 120) + ''' 
+			and
+			CPDate < ''' + convert(char(10), @PrevEndDate, 120) + '''' 
 	else
-		''
-	end
-+ N' group by MerchantNo'
+		N'select
+			MerchantNo,
+			sum(SucceedTransCount) as SucceedCount,
+			sum(SucceedTransAmount) as SucceedAmount
+		from
+			FactDailyTrans
+		where
+			DailyTransDate >= ''' + convert(char(10), @PrevStartDate, 120) + ''' 
+			and
+			DailyTransDate < ''' + convert(char(10), @PrevEndDate, 120) + '''' end
+	+ case when
+			isnull(@whereCondition, N'') <> N''
+		then
+			N' and ' + @whereCondition
+		else
+			''
+		end
+	+ N' group by MerchantNo'
 
 insert into #PrevTransSum
 (
@@ -201,25 +231,38 @@ create table #LastYearTransSum
 	SucceedAmount bigint not null
 );
 
-set @sqlScript = N'
-select
-	MerchantNo,
-	sum(SucceedTransCount) as SucceedCount,
-	sum(SucceedTransAmount) as SucceedAmount
-from
-	FactDailyTrans
-where
-	DailyTransDate >= ''' + convert(char(10), @LastYearStartDate, 120) + ''' 
-	and
-	DailyTransDate < ''' + convert(char(10), @LastYearEndDate, 120) + ''''
-+ case when
-		isnull(@whereCondition, N'') <> N''
-	then
-		N' and ' + @whereCondition
+set @sqlScript = 
+	case @BizCategory when N'代付'
+	then 
+		N'select
+			MerchantNo,
+			sum(TransCount) as SucceedCount,
+			sum(TransAmount) as SucceedAmount
+		from
+			Table_OraTransSum
+		where
+			CPDate >= ''' + convert(char(10), @LastYearStartDate, 120) + ''' 
+			and
+			CPDate < ''' + convert(char(10), @LastYearEndDate, 120) + '''' 
 	else
-		''
-	end
-+ N' group by MerchantNo'
+		N'select
+			MerchantNo,
+			sum(SucceedTransCount) as SucceedCount,
+			sum(SucceedTransAmount) as SucceedAmount
+		from
+			FactDailyTrans
+		where
+			DailyTransDate >= ''' + convert(char(10), @LastYearStartDate, 120) + ''' 
+			and
+			DailyTransDate < ''' + convert(char(10), @LastYearEndDate, 120) + '''' end
+	+ case when
+			isnull(@whereCondition, N'') <> N''
+		then
+			N' and ' + @whereCondition
+		else
+			''
+		end
+	+ N' group by MerchantNo'
 
 insert into #LastYearTransSum
 (
@@ -237,25 +280,37 @@ create table #ThisYearRunningTransSum
 	SucceedAmount bigint not null
 );
 
-set @sqlScript = N'
-select
-	MerchantNo,
-	sum(SucceedTransCount) as SucceedCount,
-	sum(SucceedTransAmount) as SucceedAmount
-from
-	FactDailyTrans
-where
-	DailyTransDate >= ''' + convert(char(10), @ThisYearRunningStartDate, 120) + ''' 
-	and
-	DailyTransDate < ''' + convert(char(10), @ThisYearRunningEndDate, 120) + ''''
-+ case when
-		isnull(@whereCondition, N'') <> N''
-	then
-		N' and ' + @whereCondition
-	else
-		''
-	end
-+ N' group by MerchantNo'
+set @sqlScript = 
+	case @BizCategory when N'代付'
+	then 
+		N'select
+			MerchantNo,
+			sum(TransCount) as SucceedCount,
+			sum(TransAmount) as SucceedAmount
+		from
+			Table_OraTransSum
+		where
+			CPDate >= ''' + convert(char(10), @ThisYearRunningStartDate, 120) + ''' 
+			and
+			CPDate < ''' + convert(char(10), @ThisYearRunningEndDate, 120) + '''' 
+	else N'select
+			MerchantNo,
+			sum(SucceedTransCount) as SucceedCount,
+			sum(SucceedTransAmount) as SucceedAmount
+		from
+			FactDailyTrans
+		where
+			DailyTransDate >= ''' + convert(char(10), @ThisYearRunningStartDate, 120) + ''' 
+			and
+			DailyTransDate < ''' + convert(char(10), @ThisYearRunningEndDate, 120) + '''' end
+	+ case when
+			isnull(@whereCondition, N'') <> N''
+		then
+			N' and ' + @whereCondition
+		else
+			''
+		end
+	+ N' group by MerchantNo'
 
 insert into #ThisYearRunningTransSum
 (
@@ -271,7 +326,11 @@ set @currTotalAmount = (select SUM(SucceedAmount) from #CurrTransSum);
 
 select
 	Coalesce(Curr.MerchantNo, Prev.MerchantNo, LastYear.MerchantNo, ThisYearRunning.MerchantNo) MerchantNo,
-	(select MerchantName from DimMerchant where MerchantNo = Coalesce(Curr.MerchantNo, Prev.MerchantNo, LastYear.MerchantNo, ThisYearRunning.MerchantNo)) MerchantName,
+	case @BizCategory when N'代付'
+	then (select MerchantName from Table_OraMerchants where MerchantNo = Coalesce(Curr.MerchantNo, Prev.MerchantNo, LastYear.MerchantNo, ThisYearRunning.MerchantNo))
+	else
+		 (select MerchantName from DimMerchant where MerchantNo = Coalesce(Curr.MerchantNo, Prev.MerchantNo, LastYear.MerchantNo, ThisYearRunning.MerchantNo))
+	end MerchantName,
 	convert(decimal, ISNULL(Curr.SucceedAmount, 0))/1000000 SucceedAmount,
 	Convert(decimal, ISNULL(Curr.SucceedCount, 0))/10000 SucceedCount,
 	case when ISNULL(Curr.SucceedCount, 0) = 0 
