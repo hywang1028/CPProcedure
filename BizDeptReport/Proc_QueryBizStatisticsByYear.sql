@@ -5,7 +5,7 @@ end
 go
 
 create procedure Proc_QueryBizStatisticsByYear
-	@BizCategory nvarchar(10) = N'代扣',
+	@BizCategory nvarchar(10) = N'代付',
 	@Year datetime = '2011-05-31'
 as
 begin
@@ -80,6 +80,31 @@ begin
 		DailyTrans.DailyTransDate >= @StartDate
 		and
 		DailyTrans.DailyTransDate < @EndDate
+	group by
+		DimDate.[每年的某一月];	
+end
+else if @BizCategory = N'代付'
+begin
+	insert into #MidResult
+	(
+		MonthNum,
+		SumCount,
+		SumAmount
+	)
+	select
+		DimDate.[每年的某一月] as MonthNum,
+		SUM(OraTrans.TransCount) as SumCount,
+		SUM(OraTrans.TransAmount) as SumAmount
+	from
+		dbo.Table_OraTransSum as OraTrans
+		inner join
+		dbo.DimDate as DimDate
+		on
+			OraTrans.CPDate = DimDate.[PK_日期]
+	where
+		OraTrans.CPDate >= @StartDate
+		and
+		OraTrans.CPDate < @EndDate
 	group by
 		DimDate.[每年的某一月];	
 end
