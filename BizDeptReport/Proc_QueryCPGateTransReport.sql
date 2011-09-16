@@ -5,8 +5,8 @@ end
 go
 
 create procedure Proc_QueryCPGateTransReport
-	@StartDate datetime = '2011-01-01',
-	@PeriodUnit nchar(2) = N'ÖÜ',
+	@StartDate datetime = '2011-08-01',
+	@PeriodUnit nchar(2) = N'ÔÂ',
 	@ReportCategory nchar(4) = N'Ã÷Ï¸'
 as
 begin
