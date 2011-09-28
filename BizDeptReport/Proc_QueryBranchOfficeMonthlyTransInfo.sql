@@ -41,7 +41,7 @@ begin
 end
 
 set @ThisYearStartDate = CONVERT(char(4),YEAR(@CurrStartDate)) + '-01-01';
-set @ThisYearEndDate = DATEADD(MONTH,1,@CurrStartDate);
+set @ThisYearEndDate = @CurrEndDate;
 
 
 --3. Get ThisYear Data
@@ -88,14 +88,18 @@ where
 	
 --4. Union all data
 select
-	*
+	MerchantNo,
+	TransAmount,
+	TransDate
 into 
 	#AllMerTrans	
 from
 	#OraTransSum	
 union all
 select 
-	*
+	MerchantNo,
+	TransAmount,
+	TransDate
 from
 	#FactDailyTrans;	
 
