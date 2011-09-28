@@ -5,8 +5,9 @@ end
 go
 
 Create Procedure Proc_QueryNewlyIncreasedMerWithBranchOffice
-	@StartDate datetime = '2010-07-12',
-	@PeriodUnit nChar(3) = N'月',
+	@StartDate datetime = '2011-02-12',
+	@PeriodUnit nChar(3) = N'自定义',
+	@EndDate datetime = '2011-04-05',
 	@BranchOfficeName nChar(15) = N'北京银联商务有限公司'
 as 
 begin
@@ -37,7 +38,11 @@ begin
 	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
 	set @CurrEndDate = DATEADD(QUARTER,2,@CurrStartDate);
 end
-
+else if(@PeriodUnit = N'自定义')
+begin
+	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
+	set @CurrEndDate =   DATEADD(MONTH,1,left(CONVERT(char,@EndDate,120),7) + '-01');
+end
 
 --3. Get Current Data
 select
