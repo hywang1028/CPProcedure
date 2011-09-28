@@ -5,8 +5,9 @@ end
 go
 
 Create Procedure Proc_QueryMerTransSumWithBranchOffice
-	@StartDate datetime = '2011-07-12',
-	@PeriodUnit nChar(3) = N'月',
+	@StartDate datetime = '2011-02-12',
+	@PeriodUnit nChar(3) = N'自定义',
+	@EndDate datetime = '2011-04-06',
 	@BranchOfficeName nChar(15) = N'银联商务有限公司安徽分公司'
 as 
 begin
@@ -36,6 +37,11 @@ else if(@PeriodUnit = N'半年')
 begin
 	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
 	set @CurrEndDate = DATEADD(QUARTER,2,@CurrStartDate);
+end
+else if(@PeriodUnit = N'自定义')
+begin
+	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
+	set @CurrEndDate =   DATEADD(MONTH,1,left(CONVERT(char,@EndDate,120),7) + '-01');
 end
 
 

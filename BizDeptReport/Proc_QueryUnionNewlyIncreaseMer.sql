@@ -5,9 +5,10 @@ end
 go
 
 Create Procedure Proc_QueryUnionNewlyIncreaseMer
-	@StartDate datetime = '2011-03-12',
-	@PeriodUnit nChar(3) = N'月',
-	@BranchOfficeName nChar(16) = N'中国银联股份有限公司内蒙古分公司'
+	@StartDate datetime = '2011-01-12',
+	@PeriodUnit nChar(3) = N'自定义',
+	@EndDate datetime = '2011-04-12',
+	@BranchOfficeName nChar(16) = N'中国银联股份有限公司安徽分公司'
 as 
 begin
 
@@ -38,7 +39,11 @@ begin
 	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
 	set @CurrEndDate = DATEADD(QUARTER,2,@CurrStartDate);
 end
-
+else if(@PeriodUnit = N'自定义')
+begin
+	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
+	set @CurrEndDate =   DATEADD(MONTH,1,LEFT(CONVERT(char,@EndDate,120),7) + '-01');
+end
 
 --3. Get Current Data
 select
