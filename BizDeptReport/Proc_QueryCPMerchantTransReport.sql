@@ -5,9 +5,9 @@ end
 go
 
 create procedure Proc_QueryCPMerchantTransReport
-	@StartDate as datetime = '2011-02-01',
-	@EndDate as datetime = '2011-02-28',
-	@BizCategory as nchar(10) = '消费类'
+	@StartDate as datetime = '2011-09-01',
+	@EndDate as datetime = '2011-09-30',
+	@BizCategory as nchar(10) = '信用卡还款'
 as
 begin
 
@@ -26,6 +26,7 @@ begin
 Create Table #PeriodSumValue
 (
 	MerchantNo char(20) not null,
+	MerchantName char(40) not null,
 	SucceedCount int not null,
 	SucceedAmount Decimal(12,2) not null
 );
@@ -34,11 +35,13 @@ Create Table #PeriodSumValue
 	insert into #PeriodSumValue
 	(
 		MerchantNo,
+		MerchantName,
 		SucceedCount,
 		SucceedAmount
 	)
 	select
 		Trans.MerchantNo,
+		Merchant.MerchantName,
 	    SUM(Trans.SucceedTransCount) AS SucceedCount,
 		Convert(Decimal,SUM(Trans.SucceedTransAmount))/100 AS SucceedAmount
 	from
@@ -46,7 +49,11 @@ Create Table #PeriodSumValue
 		inner join 
 		DimGate
 		on 
-			Trans.GateID = DimGate.GateID
+			Trans.GateID = DimGate.GateID				
+		inner join
+		DimMerchant Merchant
+		on
+			Trans.MerchantNo = Merchant.MerchantNo
 	where
 		Trans.DailyTransDate >= @StartDate
 		and
@@ -54,18 +61,21 @@ Create Table #PeriodSumValue
 		and
 		DimGate.GateNo not in ('5003', '5005', '5009', '5022', '5026', '5015','5023', '5021', '7008','0044','0045')
 	group by
-		Trans.MerchantNo;
+		Trans.MerchantNo,
+		Merchant.MerchantName;
  end
  else if (@BizCategory = N'订购类')
   begin
     insert into #PeriodSumValue
     (
 		MerchantNo,
+		MerchantName,
 		SucceedCount,
 		SucceedAmount
 	)
 	select
 		Trans.MerchantNo,
+		Merchant.MerchantName,
 	    SUM(Trans.SucceedTransCount) AS SucceedCount,
 		Convert(Decimal,SUM(Trans.SucceedTransAmount))/100 AS SucceedAmount
 	from
@@ -74,6 +84,10 @@ Create Table #PeriodSumValue
 		DimGate
 		on 
 			Trans.GateID = DimGate.GateID
+		inner join
+		DimMerchant Merchant
+		on
+			Trans.MerchantNo = Merchant.MerchantNo
 	where
 		Trans.DailyTransDate >= @StartDate
 		and
@@ -81,18 +95,21 @@ Create Table #PeriodSumValue
 		and
 		DimGate.GateNo in ('5003', '5005', '5009', '5022', '5026', '5015', '5021','5023')
 	group by
-		Trans.MerchantNo;
+		Trans.MerchantNo,
+		Merchant.MerchantName;
  end	
 else if(@BizCategory = N'代收类')
   begin
 	insert into #PeriodSumValue
 	(
 		MerchantNo,
+		MerchantName,
 		SucceedCount,
 		SucceedAmount
 	)
 	select
 		Trans.MerchantNo,
+		Merchant.MerchantName,
 	    SUM(Trans.SucceedTransCount) AS SucceedCount,
 		Convert(Decimal,SUM(Trans.SucceedTransAmount))/100 AS SucceedAmount
 	from
@@ -101,6 +118,10 @@ else if(@BizCategory = N'代收类')
 		DimGate
 		on 
 			Trans.GateID = DimGate.GateID
+		inner join
+		DimMerchant Merchant
+		on
+			Trans.MerchantNo = Merchant.MerchantNo
 	where
 		Trans.DailyTransDate >= @StartDate
 		and
@@ -108,18 +129,21 @@ else if(@BizCategory = N'代收类')
 		and
 		DimGate.GateNo in ('7008')
 	group by
-		Trans.MerchantNo;
+		Trans.MerchantNo,
+		Merchant.MerchantName;
 end
 else if(@BizCategory = N'基金定投类')
   begin
 	insert into #PeriodSumValue
 	(
 		MerchantNo,
+		MerchantName,
 		SucceedCount,
 		SucceedAmount
 	)
 	select
 		Trans.MerchantNo,
+		Merchant.MerchantName,
 	    SUM(Trans.SucceedTransCount) AS SucceedCount,
 		Convert(Decimal,SUM(Trans.SucceedTransAmount))/100 AS SucceedAmount
 	from
@@ -128,6 +152,10 @@ else if(@BizCategory = N'基金定投类')
 		DimGate
 		on 
 			Trans.GateID = DimGate.GateID
+		inner join
+		DimMerchant Merchant
+		on
+			Trans.MerchantNo = Merchant.MerchantNo
 	where
 		Trans.DailyTransDate >= @StartDate
 		and
@@ -135,27 +163,100 @@ else if(@BizCategory = N'基金定投类')
 		and
 		DimGate.GateNo in ('0044','0045')
 	group by
-		Trans.MerchantNo;
+		Trans.MerchantNo,
+		Merchant.MerchantName;
  end
-
+else if(@BizCategory = N'代付类')
+  begin
+	insert into #PeriodSumValue
+	(
+		MerchantNo,
+		MerchantName,
+		SucceedCount,
+		SucceedAmount
+	)
+	select
+		Trans.MerchantNo,
+		Merchant.MerchantName,
+	    SUM(Trans.TransCount) AS SucceedCount,
+		Convert(Decimal,SUM(Trans.TransAmount))/100 AS SucceedAmount
+	from
+		Table_OraTransSum Trans
+		inner join
+		Table_OraMerchants Merchant
+		on
+			Trans.MerchantNo = Merchant.MerchantNo
+	where
+		Trans.CPDate >= @StartDate
+		and
+		Trans.CPDate < @EndDate
+	group by
+		Trans.MerchantNo,
+		Merchant.MerchantName;
+ end
+ else if(@BizCategory = N'基金数据')
+  begin
+	insert into #PeriodSumValue
+	(
+		MerchantNo,
+		MerchantName,
+		SucceedCount,
+		SucceedAmount
+	)
+	select
+		Trans.MerchantNo,
+		Merchant.MerchantName,
+	    SUM(ISNULL(Trans.PurchaseCount,0)+ISNULL(Trans.DividendCount,0)+ISNULL(Trans.RedemptoryCount,0)-ISNULL(Trans.RetractCount,0)) AS SucceedCount,
+		Convert(Decimal,SUM(ISNULL(Trans.PurchaseAmount,0)+ISNULL(Trans.DividendAmount,0)+ISNULL(Trans.RedemptoryAmount,0)-ISNULL(Trans.RetractAmount,0)))/100 AS SucceedAmount
+	from
+		Table_FundTransSum Trans
+		inner join
+		Table_BizFundMerchant Merchant
+		on
+			Trans.MerchantNo = Merchant.MerchantNo
+	where
+		Trans.TransDate >= @StartDate
+		and
+		Trans.TransDate < @EndDate
+	group by
+		Trans.MerchantNo,
+		Merchant.MerchantName;
+ end
+ else if(@BizCategory = N'信用卡还款')
+  begin
+	insert into #PeriodSumValue
+	(
+		MerchantNo,
+		MerchantName,
+		SucceedCount,
+		SucceedAmount
+	)
+	select
+		Trans.BankNo MerchantNo,
+		Trans.BankName MerchantName,
+	    SUM(Trans.RepaymentCount) AS SucceedCount,
+		Convert(Decimal,SUM(Trans.RepaymentAmount))/100 AS SucceedAmount
+	from
+		Table_CreditCardPayment Trans
+	where
+		Trans.RepaymentDate >= @StartDate
+		and
+		Trans.RepaymentDate < @EndDate
+	group by
+		Trans.BankNo,
+		Trans.BankName;
+ end
 --3. Get Result
 select
-	Merchant.MerchantNo,
-	Merchant.MerchantName,
-	ISNULL(PeriodSumValue.SucceedCount,0) AS SucceedCount,
-	ISNULL(PeriodSumValue.SucceedAmount,0) AS SucceedAmount
+	*
 from
-	dbo.DimMerchant Merchant
-	inner join
 	#PeriodSumValue PeriodSumValue
-	on
-		Merchant.MerchantNo = PeriodSumValue.MerchantNo
 where
 	PeriodSumValue.SucceedCount > 0
 order by
-	Merchant.MerchantID,
-	Merchant.MerchantName;
-		
+	PeriodSumValue.MerchantNo,
+	PeriodSumValue.MerchantName;
+	
 --4. Clear temp table
 drop table #PeriodSumValue;
 
