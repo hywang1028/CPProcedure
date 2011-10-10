@@ -5,10 +5,10 @@ end
 go
 
 Create Procedure Proc_QueryMerTransSumWithBranchOffice
-	@StartDate datetime = '2011-02-12',
+	@StartDate datetime = '2010-01-12',
 	@PeriodUnit nChar(3) = N'自定义',
-	@EndDate datetime = '2011-04-06',
-	@BranchOfficeName nChar(15) = N'银联商务有限公司安徽分公司'
+	@EndDate datetime = '2011-09-06',
+	@BranchOfficeName nChar(15) = N'银联商务有限公司四川分公司'
 as 
 begin
 
@@ -183,7 +183,7 @@ into
 from
 	Table_SalesDeptConfiguration
 where
-	BranchOffice in (N'中国银联股份有限公司重庆分公司',N'中国银联股份有限公司湖南分公司',N'中国银联股份有限公司宁波分公司');
+	BranchOffice in (N'中国银联股份有限公司重庆分公司',N'中国银联股份有限公司湖南分公司',N'中国银联股份有限公司宁波分公司',N'中国银联股份有限公司四川分公司');
 	
 
 --8. Get Result	
