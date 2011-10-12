@@ -6,12 +6,13 @@ go
 
 create procedure Proc_QueryUPOPMerchantTransReport
 	@StartDate datetime = '2011-01-01',
-	@PeriodUnit nchar(2) = N'周'
+	@PeriodUnit nchar(4) = N'周',
+	@EndDate datetime = '2011-05-31'
 as
 begin
 
 --1. Check input
-if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'')
+if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'' or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin
 	raiserror(N'Input params cannot be empty in Proc_QueryUPOPMerchantTransReport', 16, 1);
 end
@@ -44,6 +45,11 @@ else if(@PeriodUnit = N'年')
 begin
     set @CurrStartDate = @StartDate;
     set @CurrEndDate = DATEADD(YEAR, 1, @StartDate);
+end
+else if(@PeriodUnit = N'自定义')
+begin
+    set @CurrStartDate = @StartDate;
+    set @CurrEndDate = DateAdd(day,1,@EndDate);
 end
 
 --3. Get UPOP GateNo
