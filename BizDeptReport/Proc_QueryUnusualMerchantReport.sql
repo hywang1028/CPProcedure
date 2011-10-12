@@ -8,12 +8,13 @@ create procedure Proc_QueryUnusualMerchantReport
 	@StartDate as datetime = '2011-07-01',
 	@PeriodUnit as nchar(2) = N'月',
 	@MonthPeriod as tinyint = 2,
-	@TopNum as smallint	 = 120
+	@TopNum as smallint	 = 120,
+	@EndDate datetime = '2011-05-30'
 as
 begin
 
 --1. Check input
-if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'' or @TopNum is null or @MonthPeriod is null)
+if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'' or @TopNum is null or @MonthPeriod is null  or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin
 	raiserror(N'Input params cannot be empty in Proc_QueryUnusualMerchantReport', 16, 1);
 end;
@@ -95,6 +96,15 @@ begin
     set @CurrStartDate = @StartDate;
     set @CurrEndDate = DATEADD(YEAR, 1, @StartDate);
     set @PrevStartDate = DATEADD(YEAR, -1, @CurrStartDate);
+    set @PrevEndDate = @CurrStartDate;
+    set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
+    set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
+end
+else if(@PeriodUnit = N'自定义')
+begin
+    set @CurrStartDate = @StartDate;
+    set @CurrEndDate = DateAdd(day,1,@EndDate);
+    set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
     set @PrevEndDate = @CurrStartDate;
     set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
     set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);

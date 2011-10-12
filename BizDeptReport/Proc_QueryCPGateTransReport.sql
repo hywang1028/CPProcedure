@@ -6,13 +6,14 @@ go
 
 create procedure Proc_QueryCPGateTransReport
 	@StartDate datetime = '2011-08-01',
-	@PeriodUnit nchar(2) = N'月',
-	@ReportCategory nchar(4) = N'明细'
+	@PeriodUnit nchar(4) = N'月',
+	@ReportCategory nchar(4) = N'明细',
+	@EndDate datetime = '2011-05-30'
 as
 begin
 
 --1. Check input
-if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'')
+if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N''  or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin
 	raiserror(N'Input params cannot be empty in Proc_QueryCPGateTransReport', 16, 1);
 end
@@ -72,7 +73,15 @@ begin
     set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
     set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 end
-
+else if(@PeriodUnit = N'自定义')
+begin
+    set @CurrStartDate = @StartDate;
+    set @CurrEndDate = DateAdd(day,1,@EndDate);
+    set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
+    set @PrevEndDate = @CurrStartDate;
+    set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
+    set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
+end
 set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01';
 set @ThisYearRunningEndDate = @CurrEndDate;
 
