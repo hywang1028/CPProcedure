@@ -5,14 +5,15 @@ end
 go
 
 create procedure Proc_QueryGateSucceedRatio
-	@StartDate datetime,
-	@PeriodUnit nchar(2),
-	@ReportCategory as nvarchar(4) = N'汇总'
+	@StartDate datetime = '2011-08-30',
+	@PeriodUnit nchar(4)= N'自定义',
+	@ReportCategory as nvarchar(4) = N'汇总',
+	@EndDate datetime = '2011-9-30'
 as
 begin
 
 --1. Check input
-if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'')
+if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N''  or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin
 	raiserror(N'Input params cannot be empty in Proc_QueryGateSucceedRatio', 16, 1);
 end
@@ -70,6 +71,15 @@ begin
     set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
     set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 end
+else if(@PeriodUnit = N'自定义')
+begin
+    set @CurrStartDate = @StartDate;
+    set @CurrEndDate = DateAdd(day,1,@EndDate);
+    set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
+    set @PrevEndDate = @CurrStartDate;
+    set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
+    set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
+end
 
 --3. Get Current SucceedCount
 select
@@ -104,7 +114,7 @@ where
 	DailyTransDate < @PrevEndDate
 group by
 	GateNo;
-
+	
 --5. Get LastYear SucceedCount
 select
 	GateNo,
@@ -314,10 +324,10 @@ begin
 		#TempTotalRatio;			
 end
 --9. Clear temp table
-drop table #TotalRatio;
-drop table #TotalCount;
-drop table #LastYearCount;
-drop table #PrevCount;
-drop table #CurrCount;
+--drop table #TotalRatio;
+--drop table #TotalCount;
+--drop table #LastYearCount;
+--drop table #PrevCount;
+--drop table #CurrCount;
 
 end 
