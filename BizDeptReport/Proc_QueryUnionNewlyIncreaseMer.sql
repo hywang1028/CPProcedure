@@ -12,7 +12,6 @@ Create Procedure Proc_QueryUnionNewlyIncreaseMer
 as 
 begin
 
-
 --1. Check Input
 if (@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or ISNULL(@BranchOfficeName,N'') = N'')
 begin
@@ -41,9 +40,10 @@ begin
 end
 else if(@PeriodUnit = N'×Ô¶¨Òå')
 begin
-	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
-	set @CurrEndDate =   DATEADD(MONTH,1,LEFT(CONVERT(char,@EndDate,120),7) + '-01');
+	set @CurrStartDate = @StartDate;
+	set @CurrEndDate =   DATEADD(DAY,1,@EndDate);
 end
+
 
 --3. Get Current Data
 select
@@ -59,22 +59,37 @@ where
 	OpenAccountDate < @CurrEndDate;
 	
 	
---4. Get NewlyIncreasedMerchantInfo
+--4.Get MerchantNo With BranchOffice
+select
+	SalesDeptConfiguration.MerchantNo,
+	BranchOfficeNameRule.UnionPaySpec BranchOffice
+into
+	#MerWithBranch
+from
+	Table_SalesDeptConfiguration SalesDeptConfiguration
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		SalesDeptConfiguration.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+where
+	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName;
+	
+	
+--5. Get NewlyIncreasedMerchantInfo
 select
 	MerOpenAccountInfo.MerchantName,
 	MerOpenAccountInfo.MerchantNo
 from
 	#MerOpenAccountInfo MerOpenAccountInfo
 	inner join
-	Table_SalesDeptConfiguration SalesDeptConfig
+	#MerWithBranch MerWithBranch
 	on
-		MerOpenAccountInfo.MerchantNo = SalesDeptConfig.MerchantNo
-where
-	SalesDeptConfig.BranchOffice = @BranchOfficeName;
+		MerOpenAccountInfo.MerchantNo = MerWithBranch.MerchantNo;
 	
 	
---5. drop temp table
+--6. drop temp table
 drop table #MerOpenAccountInfo;
+drop table #MerWithBranch;
 
 end
 	

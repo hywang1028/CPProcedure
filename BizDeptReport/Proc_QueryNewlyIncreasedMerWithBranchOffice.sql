@@ -5,10 +5,10 @@ end
 go
 
 Create Procedure Proc_QueryNewlyIncreasedMerWithBranchOffice
-	@StartDate datetime = '2010-01-12',
+	@StartDate datetime = '2011-03-01',
 	@PeriodUnit nChar(3) = N'自定义',
-	@EndDate datetime = '2011-09-05',
-	@BranchOfficeName nChar(15) = N'银联商务有限公司四川分公司'
+	@EndDate datetime = '2011-04-30',
+	@BranchOfficeName nChar(15) = N'银联商务有限公司安徽分公司'
 as 
 begin
 
@@ -40,9 +40,10 @@ begin
 end
 else if(@PeriodUnit = N'自定义')
 begin
-	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
-	set @CurrEndDate =   DATEADD(MONTH,1,left(CONVERT(char,@EndDate,120),7) + '-01');
+	set @CurrStartDate = @StartDate;
+	set @CurrEndDate =   DATEADD(DAY,1,@EndDate);
 end
+
 
 --3. Get Current Data
 select
@@ -60,68 +61,42 @@ where
 
 --4. Get table MerWithBranchOffice
 select
-	SalesDeptConfiguration.MerchantNo
+	SalesDeptConfiguration.MerchantNo,
+	BranchOfficeNameRule.UmsSpecMark
 into
 	#MerWithBranchOffice
 from
 	Table_SalesDeptConfiguration SalesDeptConfiguration
 	inner join
-	Table_BranchOfficeNameMapping BranchOfficeNameMapping
+	Table_BranchOfficeNameRule BranchOfficeNameRule
 	on
-		SalesDeptConfiguration.BranchOffice = BranchOfficeNameMapping.OrigBranchOffice
+		SalesDeptConfiguration.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
 where
-	BranchOfficeNameMapping.DestBranchOffice = @BranchOfficeName;
+	BranchOfficeNameRule.UmsSpec = @BranchOfficeName;
 	
 	
-	
---5. Get NewlyIncreasedMerWithBranchOffice
+--5. Get Newly Increased Merchant & Special Merchant
 select
-	MerOpenAccountInfo.MerchantName,
+	case when 
+			MerWithBranchOffice.UmsSpecMark = 1
+		 then
+			'*'+MerOpenAccountInfo.MerchantName
+		 else
+			MerOpenAccountInfo.MerchantName
+		 end MerchantName,
 	MerOpenAccountInfo.MerchantNo
-into
-	#NewlyIncreasedMer
 from
 	#MerOpenAccountInfo MerOpenAccountInfo
 	inner join
 	#MerWithBranchOffice MerWithBranchOffice
 	on
 		MerOpenAccountInfo.MerchantNo = MerWithBranchOffice.MerchantNo;
-	
 
---6. Get Special MerchantNo
-select 
-	MerchantNo
-into
-	#SpecMerchantNo
-from
-	Table_SalesDeptConfiguration
-where
-	BranchOffice in (N'中国银联股份有限公司重庆分公司',N'中国银联股份有限公司湖南分公司',N'中国银联股份有限公司宁波分公司',N'中国银联股份有限公司四川分公司');
 	
-
---7. Get Result	
-update
-	NewlyIncreasedMer
-set
-	NewlyIncreasedMer.MerchantName = ('*'+NewlyIncreasedMer.MerchantName)
-from
-	#NewlyIncreasedMer NewlyIncreasedMer 
-	inner join
-	#SpecMerchantNo SpecMerchantNo
-	on
-		NewlyIncreasedMer.MerchantNo = SpecMerchantNo.MerchantNo;
-
-select
-	MerchantName,
-	MerchantNo
-from	
-	#NewlyIncreasedMer;	
-	
---8. drop temp table
+--6. drop temp table
 drop table #MerOpenAccountInfo;
 drop table #MerWithBranchOffice;
-drop table #NewlyIncreasedMer;
-drop table #SpecMerchantNo;
+
 end
 	
 	
