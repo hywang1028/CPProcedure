@@ -11,7 +11,6 @@ Create Procedure Proc_QueryUnionBranchOfficeMonthlyTrans
 as 
 begin
 
-
 --1. Check Input
 if (@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or ISNULL(@BranchOfficeName,N'') = N'')
 begin
@@ -73,19 +72,24 @@ where
 	DailyTransDate < @ThisYearEndDate;
 	
 select 
-	MerchantNo,
-	SucceedTransAmount as TransAmount,
-	TransDate
+	EmallTransSum.MerchantNo,
+	EmallTransSum.SucceedTransAmount as TransAmount,
+	EmallTransSum.TransDate
 into 
 	#EmallTransSum
 from	
-	Table_EmallTransSum
+	Table_EmallTransSum EmallTransSum
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		EmallTransSum.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
 where 
-	TransDate >= @ThisYearStartDate
+	EmallTransSum.TransDate >= @ThisYearStartDate
 	and
-	TransDate < @ThisYearEndDate
+	EmallTransSum.TransDate < @ThisYearEndDate
 	and
-	BranchOffice = @BranchOfficeName;
+	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName;
+	
 	
 --4. Union all data
 select
@@ -128,4 +132,5 @@ select
 from
 	#EmallTransSum;
 
---6.1 Create temp time period tableCREATE TABLE #TimePeriod(	PeriodStart datetime NOT NULL PRIMARY KEY, 	PeriodEnd datetime NOT NULL); --6.2 Fill #TimePeriodDECLARE @PeriodStart datetime; DECLARE @PeriodEnd datetime;SET @PeriodStart = @ThisYearStartDate;SET @PeriodEnd = 	CASE @PeriodUnit       WHEN N'月' THEN DATEADD(month, 1, @PeriodStart)       WHEN N'季度' THEN DATEADD(QUARTER, 1, @PeriodStart)       WHEN N'半年' THEN DATEADD(QUARTER, 2, @PeriodStart)       ELSE @PeriodStart     END;       WHILE (@PeriodEnd <= @ThisYearEndDate) BEGIN		INSERT INTO #TimePeriod	(		PeriodStart, 		PeriodEnd	)	VALUES 	(		@PeriodStart,		@PeriodEnd	);	SET @PeriodStart = @PeriodEnd;	SET @PeriodEnd = 		CASE @PeriodUnit 		  WHEN N'月' THEN DATEADD(month, 1, @PeriodStart) 		  WHEN N'季度' THEN DATEADD(QUARTER, 1, @PeriodStart) 		  WHEN N'半年' THEN DATEADD(QUARTER, 2, @PeriodStart) 		  ELSE @PeriodStart 		END;END--7. Get Resultselect	Left(CONVERT(char,TimePeriod.PeriodStart,120),7) as PeriodStart,	CONVERT(decimal,SUM(ISNULL(AllMerTransWithBo.TransAmount,0)))/1000000 as SumTransAmountfrom	#TimePeriod TimePeriod	left join	#AllMerTransWithBo AllMerTransWithBo	on		AllMerTransWithBo.TransDate >= TimePeriod.PeriodStart		and		AllMerTransWithBo.TransDate < TimePeriod.PeriodEndgroup by	TimePeriod.PeriodStartorder by	TimePeriod.PeriodStart;		--8. drop temp tabledrop table #OraTransSum;drop table #FactDailyTrans;drop table #EmallTransSum;drop table #AllMerTrans;drop table #AllMerTransWithBo;drop table #TimePeriod;end
+
+--6.1 Create temp time period tableCREATE TABLE #TimePeriod(	PeriodStart datetime NOT NULL PRIMARY KEY, 	PeriodEnd datetime NOT NULL); --6.2 Fill #TimePeriodDECLARE @PeriodStart datetime; DECLARE @PeriodEnd datetime;SET @PeriodStart = @ThisYearStartDate;SET @PeriodEnd = 	CASE @PeriodUnit       WHEN N'月' THEN DATEADD(month, 1, @PeriodStart)       WHEN N'季度' THEN DATEADD(QUARTER, 1, @PeriodStart)       WHEN N'半年' THEN DATEADD(QUARTER, 2, @PeriodStart)       ELSE DATEADD(day,1,@ThisYearEndDate)     END;       WHILE (@PeriodEnd <= @ThisYearEndDate) BEGIN		INSERT INTO #TimePeriod	(		PeriodStart, 		PeriodEnd	)	VALUES 	(		@PeriodStart,		@PeriodEnd	);	SET @PeriodStart = @PeriodEnd;	SET @PeriodEnd = 		CASE @PeriodUnit 		  WHEN N'月' THEN DATEADD(month, 1, @PeriodStart) 		  WHEN N'季度' THEN DATEADD(QUARTER, 1, @PeriodStart) 		  WHEN N'半年' THEN DATEADD(QUARTER, 2, @PeriodStart) 		  ELSE DATEADD(day,1,@ThisYearEndDate) 		END;END--7. Get Resultselect	Left(CONVERT(char,TimePeriod.PeriodStart,120),7) as PeriodStart,	CONVERT(decimal,SUM(ISNULL(AllMerTransWithBo.TransAmount,0)))/1000000 as SumTransAmountfrom	#TimePeriod TimePeriod	left join	#AllMerTransWithBo AllMerTransWithBo	on		AllMerTransWithBo.TransDate >= TimePeriod.PeriodStart		and		AllMerTransWithBo.TransDate < TimePeriod.PeriodEndgroup by	TimePeriod.PeriodStartorder by	TimePeriod.PeriodStart;		--8. drop temp tabledrop table #OraTransSum;drop table #FactDailyTrans;drop table #EmallTransSum;drop table #AllMerTrans;drop table #AllMerTransWithBo;drop table #TimePeriod;end

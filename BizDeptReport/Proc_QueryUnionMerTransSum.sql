@@ -6,8 +6,8 @@ go
 
 Create Procedure Proc_QueryUnionMerTransSum
 	@StartDate datetime = '2011-06-12',
-	@PeriodUnit nChar(3) = N'月',
-	@EndDate datetime = '2011-06-12',
+	@PeriodUnit nChar(3) = N'自定义',
+	@EndDate datetime = '2011-09-12',
 	@BranchOfficeName nChar(16) = N'中国银联股份有限公司安徽分公司'
 as 
 begin
@@ -40,9 +40,10 @@ begin
 end
 else if(@PeriodUnit = N'自定义')
 begin
-	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
-	set @CurrEndDate =   DATEADD(MONTH,1,left(CONVERT(char,@EndDate,120),7) + '-01');
+	set @CurrStartDate = @StartDate;
+	set @CurrEndDate =   DATEADD(DAY,1,@EndDate);
 end
+
 
 --3.Get SpecifiedTimePeriod Data
 select
@@ -76,28 +77,48 @@ group by
 	MerchantNo;
 	
 select 
-	MerchantNo,
-	MerchantName,
-	sum(SucceedTransCount) TransCount,
-	sum(SucceedTransAmount) TransAmount
+	EmallTransSum.MerchantNo,
+	EmallTransSum.MerchantName,
+	sum(EmallTransSum.SucceedTransCount) TransCount,
+	sum(EmallTransSum.SucceedTransAmount) TransAmount
 into 
 	#EmallTransSum
 from	
-	Table_EmallTransSum
+	Table_EmallTransSum EmallTransSum
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		EmallTransSum.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
 where 
-	TransDate >= @CurrStartDate
+	EmallTransSum.TransDate >= @CurrStartDate
 	and
-	TransDate < @CurrEndDate
+	EmallTransSum.TransDate < @CurrEndDate
 	and
-	BranchOffice = @BranchOfficeName
+	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName
 group by
-	MerchantNo,
-	MerchantName;
+	EmallTransSum.MerchantNo,
+	EmallTransSum.MerchantName;
 	
 
---4. Get TransDetail respectively
+--4. Get table Merchant With BranchOffice
 select
-	SalesDeptConfig.MerchantName,
+	SalesDeptConfiguration.MerchantName,
+	SalesDeptConfiguration.MerchantNo
+into
+	#MerWithBranchOffice
+from
+	Table_BranchOfficeNameRule BranchOfficeNameRule 
+	inner join
+	Table_SalesDeptConfiguration SalesDeptConfiguration
+	on
+		BranchOfficeNameRule.UnnormalBranchOfficeName = SalesDeptConfiguration.BranchOffice
+where 
+	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName;
+	
+	
+--5. Get TransDetail respectively
+select
+	MerWithBranchOffice.MerchantName,
 	OraTransSum.MerchantNo,
 	OraTransSum.TransCount,
 	OraTransSum.TransAmount
@@ -106,15 +127,12 @@ into
 from
 	#OraTransSum OraTransSum
 	inner join
-	Table_SalesDeptConfiguration SalesDeptConfig
+	#MerWithBranchOffice MerWithBranchOffice
 	on
-		OraTransSum.MerchantNo = SalesDeptConfig.MerchantNo
-where
-	SalesDeptConfig.BranchOffice = @BranchOfficeName;
-
+		OraTransSum.MerchantNo = MerWithBranchOffice.MerchantNo;
 	
 select
-	SalesDeptConfig.MerchantName,
+	MerWithBranchOffice.MerchantName,
 	FactDailyTrans.MerchantNo,
 	FactDailyTrans.SucceedTransCount as TransCount,
 	FactDailyTrans.SucceedTransAmount as TransAmount
@@ -123,11 +141,9 @@ into
 from
 	#FactDailyTrans FactDailyTrans
 	inner join
-	Table_SalesDeptConfiguration SalesDeptConfig
+	#MerWithBranchOffice MerWithBranchOffice
 	on
-		FactDailyTrans.MerchantNo = SalesDeptConfig.MerchantNo
-where
-	SalesDeptConfig.BranchOffice = @BranchOfficeName;
+		FactDailyTrans.MerchantNo = MerWithBranchOffice.MerchantNo;
 
 	
 --5. Union all Trans
