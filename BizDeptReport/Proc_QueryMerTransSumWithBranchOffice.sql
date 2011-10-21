@@ -5,10 +5,10 @@ end
 go
 
 Create Procedure Proc_QueryMerTransSumWithBranchOffice
-	@StartDate datetime = '2010-01-12',
+	@StartDate datetime = '2011-03-01',
 	@PeriodUnit nChar(3) = N'自定义',
-	@EndDate datetime = '2011-09-06',
-	@BranchOfficeName nChar(15) = N'银联商务有限公司四川分公司'
+	@EndDate datetime = '2011-08-31',
+	@BranchOfficeName nChar(15) = N'银联商务有限公司安徽分公司'
 as 
 begin
 
@@ -40,8 +40,8 @@ begin
 end
 else if(@PeriodUnit = N'自定义')
 begin
-	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
-	set @CurrEndDate =   DATEADD(MONTH,1,left(CONVERT(char,@EndDate,120),7) + '-01');
+	set @CurrStartDate = @StartDate;
+	set @CurrEndDate =   DATEADD(DAY,1,@EndDate);
 end
 
 
@@ -77,23 +77,28 @@ group by
 	MerchantNo;
 	
 select 
-	MerchantNo,
-	MerchantName,
-	sum(SucceedTransCount) TransCount,
-	sum(SucceedTransAmount) TransAmount
+	EmallTransSum.MerchantNo,
+	EmallTransSum.MerchantName,
+	sum(EmallTransSum.SucceedTransCount) TransCount,
+	sum(EmallTransSum.SucceedTransAmount) TransAmount
 into 
 	#EmallTransSum
 from	
-	Table_EmallTransSum
+	Table_EmallTransSum EmallTransSum
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		EmallTransSum.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
 where 
-	TransDate >= @CurrStartDate
+	EmallTransSum.TransDate >= @CurrStartDate
 	and
-	TransDate < @CurrEndDate
+	EmallTransSum.TransDate < @CurrEndDate
 	and
-	BranchOffice = @BranchOfficeName
+	BranchOfficeNameRule.UmsSpec = @BranchOfficeName
 group by
-	MerchantNo,
-	MerchantName;
+	EmallTransSum.MerchantNo,
+	EmallTransSum.MerchantName;
+
 
 --4. Get table MerWithBranchOffice
 select
@@ -102,13 +107,14 @@ select
 into
 	#MerWithBranchOffice
 from
-	Table_BranchOfficeNameMapping BranchOfficeNameMapping 
+	Table_BranchOfficeNameRule BranchOfficeNameRule 
 	inner join
 	Table_SalesDeptConfiguration SalesDeptConfiguration
 	on
-		BranchOfficeNameMapping.OrigBranchOffice = SalesDeptConfiguration.BranchOffice
+		BranchOfficeNameRule.UnnormalBranchOfficeName = SalesDeptConfiguration.BranchOffice
 where 
-	BranchOfficeNameMapping.DestBranchOffice = @BranchOfficeName;
+	BranchOfficeNameRule.UmsSpec = @BranchOfficeName;
+
 
 --5. Get TransDetail respectively
 select
@@ -125,7 +131,6 @@ from
 	on
 		OraTransSum.MerchantNo = MerWithBranchOffice.MerchantNo;
 
-	
 select
 	MerWithBranchOffice.MerchantName,
 	FactDailyTrans.MerchantNo,
@@ -140,8 +145,7 @@ from
 	on
 		FactDailyTrans.MerchantNo = MerWithBranchOffice.MerchantNo;
 
-
-		
+	
 --6. Union all Trans
 select
 	MerchantName,
@@ -175,15 +179,20 @@ from
 	from
 		#EmallTransSum) Mer; 
 	
+	
 --7. Get Special MerchantNo
 select 
-	MerchantNo
+	SalesDeptConfiguration.MerchantNo
 into
 	#SpecMerchantNo
 from
-	Table_SalesDeptConfiguration
+	Table_SalesDeptConfiguration SalesDeptConfiguration
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		SalesDeptConfiguration.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
 where
-	BranchOffice in (N'中国银联股份有限公司重庆分公司',N'中国银联股份有限公司湖南分公司',N'中国银联股份有限公司宁波分公司',N'中国银联股份有限公司四川分公司');
+	BranchOfficeNameRule.UmsSpecMark = 1;
 	
 
 --8. Get Result	
@@ -205,6 +214,7 @@ select
 	TransAmount
 from	
 	#AllTransSum;
+
 
 --9. drop temp table
 drop table #OraTransSum;

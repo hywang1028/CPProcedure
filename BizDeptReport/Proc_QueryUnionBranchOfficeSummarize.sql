@@ -11,7 +11,6 @@ create procedure Proc_QueryUnionBranchOfficeSummarize
 as 
 begin
 
-
 --1. Check Input
 if (@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin
@@ -40,8 +39,8 @@ begin
 end
 else if(@PeriodUnit = N'自定义')
 begin
-	set @CurrStartDate = LEFT(CONVERT(char,@StartDate,120),7) + '-01';
-	set @CurrEndDate = LEFT(CONVERT(char,DATEADD(MONTH,1,@EndDate),120),7) + '-01';
+	set @CurrStartDate = @StartDate;
+	set @CurrEndDate = DATEADD(DAY,1,@EndDate);
 end
 
 
@@ -77,31 +76,27 @@ group by
 	MerchantNo;
 	
 select
-	MerchantNo,
-	BranchOffice,
-	SUM(ISNULL(SucceedTransCount,0)) TransCount,
-	SUM(ISNULL(SucceedTransAmount,0)) TransAmount
+	EmallTransSum.MerchantNo,
+	BranchOfficeNameRule.UnionPaySpec BranchOffice,
+	SUM(ISNULL(EmallTransSum.SucceedTransCount,0)) TransCount,
+	SUM(ISNULL(EmallTransSum.SucceedTransAmount,0)) TransAmount
 into
 	#EmallTransSum
 from
-	Table_EmallTransSum
+	Table_EmallTransSum EmallTransSum
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		EmallTransSum.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+		and
+		ISNULL(BranchOfficeNameRule.UnionPaySpec,N'') <> N''
 where
-	TransDate >= @CurrStartDate
+	EmallTransSum.TransDate >= @CurrStartDate
 	and
-	TransDate < @CurrEndDate
-	and
-	BranchOffice in
-(
-	select distinct
-		BranchOffice
-	from
-		Table_SalesDeptConfiguration 
-	where
-		Channel = N'银联'
-)	
+	EmallTransSum.TransDate < @CurrEndDate	
 group by
-	MerchantNo,
-	BranchOffice;
+	EmallTransSum.MerchantNo,
+	BranchOfficeNameRule.UnionPaySpec;
 	
 select
 	MerchantNo
@@ -117,14 +112,18 @@ where
 
 --4.Get MerchantNoWithBranchOffice 
 select
-	BranchOffice, 
-	MerchantNo
+	SalesDeptConfig.MerchantNo,
+	BranchOfficeNameRule.UnionPaySpec BranchOffice
 into
 	#MerWithBranch
 from
-	Table_SalesDeptConfiguration 
-where
-	Channel = N'银联'
+	Table_SalesDeptConfiguration SalesDeptConfig
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		SalesDeptConfig.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+		and
+		ISNULL(BranchOfficeNameRule.UnionPaySpec,N'') <> N'';
 		
 		
 --5. Get Respectively BranchOffice
@@ -213,7 +212,6 @@ With #Sum as
 	from 
 		#Result
 )
-
 select
 	R.BranchOffice,
 	R.NewlyIncreMerCount,
