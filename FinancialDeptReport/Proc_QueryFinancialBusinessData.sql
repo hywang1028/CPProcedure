@@ -5,9 +5,9 @@ end
 go
 
 create procedure Proc_QueryFinancialBusinessData
-	@StartDate datetime = '2011-05-01',
-	@EndDate datetime = '2011-06-01',
-	@BizType nvarchar(20) = N'B2B'
+	@StartDate datetime = '2011-08-01',
+	@EndDate datetime = '2011-08-31',
+	@BizType nvarchar(20) = N'B2C'
 as
 begin
 
@@ -29,8 +29,8 @@ declare @LastYearEndDate datetime;
 begin
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(DAY,1,@EndDate);
-set @PrevStartDate = DATEADD(DAY,-1*DATEDIFF(DAY,@CurrStartDate,@CurrEndDate),@CurrStartDate);
-set @PrevEndDate = @CurrStartDate;
+set @PrevStartDate = DATEADD(MONTH, -1, @CurrStartDate);
+set @PrevEndDate = DATEADD(MONTH, -1, @CurrEndDate);
 set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);
 set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);
 end
@@ -291,7 +291,10 @@ from
 	full outer join
 	#LastYearDaily LastYearDaily
 	on
-		coalesce(CurrDaily.BankChannel,PrevDaily.BankChannel) = LastYearDaily.BankChannel;
+		coalesce(CurrDaily.BankChannel,PrevDaily.BankChannel) = LastYearDaily.BankChannel
+order by
+	BankName,
+	BankChannel;
 		
 
 --5. Drop Temporary Tables
