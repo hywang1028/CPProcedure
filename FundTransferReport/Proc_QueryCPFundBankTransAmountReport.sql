@@ -6,7 +6,7 @@ go
 
 create procedure Proc_QueryCPFundBankTransAmountReport
 	@StartDate datetime = '2011-05-01',
-	@PeriodUnit nchar(3) = N'自定义',
+	@PeriodUnit nchar(4) = N'自定义',
 	@EndDate datetime = '2011-05-30'
 as
 begin

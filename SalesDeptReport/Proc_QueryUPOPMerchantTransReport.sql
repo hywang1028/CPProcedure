@@ -7,7 +7,7 @@ go
 create procedure Proc_QueryUPOPMerchantTransReport
 	@StartDate datetime = '2011-01-01',
 	@PeriodUnit nchar(4) = N'ÖÜ',
-	@EndDate datetime = '2011-05-31'
+	@EndDate datetime = '2011-09-30'
 as
 begin
 
@@ -60,7 +60,7 @@ into
 from 
 	dbo.DimGate 
 where 
-	BankName = N'UPOPÍø¹Ø×é';
+	DimGate.GateNo in ('8604','8607');
 	
 --4. Get Payment Data
 With PeriodTrans as
@@ -81,7 +81,7 @@ select
 	Upop.MerchantNo,
 	convert(decimal, SUM(isnull(Trans.SucceedTransAmount,0)))/100 as SumAmount,
 	Convert(decimal, SUM(case when
-			Gate.GateNo is not null 
+			GateNo.GateNo is not null 
 		then 
 			Trans.SucceedTransAmount 
 		else 
@@ -94,9 +94,9 @@ from
 	on
 		Upop.MerchantNo = Trans.MerchantNo
 	left join
-	#GateNo Gate
+	#GateNo GateNo
 	on
-		Trans.GateNo = Gate.GateNo
+		Trans.GateNo = GateNo.GateNo
 group by
 	Upop.MerchantName,
 	Upop.MerchantNo
