@@ -5,8 +5,8 @@ end
 go
 
 create procedure Proc_QueryFinancialTransLogReport
-	@StartDate datetime = '2011-05-12',
-	@EndDate datetime = '2011-05-30'
+	@StartDate datetime = '2011-09-01',
+	@EndDate datetime = '2011-09-30'
 as
 begin
 
@@ -28,8 +28,18 @@ declare @ThisYearRunningEndDate datetime;
 
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DateAdd(day,1,@EndDate);
-set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
-set @PrevEndDate = @CurrStartDate;
+
+if (DAY(@CurrStartDate)=1 and DAY(@CurrEndDate)=1)
+begin
+    set @PrevStartDate = DATEADD(month, (-1)*datediff(month, @CurrStartDate, @CurrEndDate), @CurrStartDate);
+    set @PrevEndDate = DATEADD(month, (-1)*datediff(month, @CurrStartDate, @CurrEndDate), @CurrEndDate);
+end
+else
+begin
+    set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
+	set @PrevEndDate = @CurrStartDate;
+end
+
 set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
 set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 
