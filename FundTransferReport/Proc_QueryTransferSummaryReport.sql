@@ -6,7 +6,7 @@ go
 
 create procedure Proc_QueryTransferSummaryReport
 	@StartDate datetime = '2011-05-01',
-	@PeriodUnit nchar(3) = N'ÔÂ',
+	@PeriodUnit nchar(4) = N'ÔÂ',
 	@EndDate datetime = '2011-05-31'
 as
 begin
