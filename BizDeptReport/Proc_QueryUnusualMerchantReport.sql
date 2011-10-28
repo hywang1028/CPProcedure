@@ -5,8 +5,8 @@ end
 go
 
 create procedure Proc_QueryUnusualMerchantReport
-	@StartDate as datetime = '2011-07-01',
-	@PeriodUnit as nchar(2) = N'月',
+	@StartDate as datetime = '2011-10-20',
+	@PeriodUnit as nchar(2) = N'周',
 	@MonthPeriod as tinyint = 2,
 	@TopNum as smallint	 = 120,
 	@EndDate datetime = '2011-05-30'
@@ -23,20 +23,26 @@ end;
 With CandidateUnusualMerchant as
 (
 	select
-		MerchantNo,
-		SUM(SucceedTransAmount) SumSucceedAmount
+		Trans.MerchantNo,
+		SUM(Trans.SucceedTransAmount) SumSucceedAmount
 	from
-		FactDailyTrans
+		FactDailyTrans Trans
+		inner join
+		Table_MerInfo MerInfo
+		on
+			Trans.MerchantNo = MerInfo.MerchantNo
 	where
-		GateNo not in ('0044', '0045')
+		Trans.GateNo not in ('0044', '0045')
 		and
-		DailyTransDate >= dateadd(month, -1 * @MonthPeriod, convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01')
+		Trans.DailyTransDate >= dateadd(month, -1 * @MonthPeriod, convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01')
 		and
-		DailyTransDate < convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01'
+		Trans.DailyTransDate < convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01'
 		and
-		MerchantNo not in (select MerchantNo from Table_FacilityMerchantRelation where FacilityNo = '000020100816001')
+		Trans.MerchantNo not in (select MerchantNo from Table_FacilityMerchantRelation where FacilityNo = '000020100816001')
+		and
+		MerInfo.MerchantName not like '%基金管理%'
 	group by
-		MerchantNo
+		Trans.MerchantNo
 )
 select top(@TopNum)
 	MerchantNo
@@ -161,7 +167,7 @@ group by
 --7. Query result
 select
 	UnusualMerchant.MerchantNo,
-	ISNULL(DimMerchant.MerchantName, N'') as MerchantName,
+	ISNULL(MerInfo.MerchantName, N'') as MerchantName,
 	convert(decimal, ISNULL(CurrSum.CurrSumAmount, 0))/100 as CurrSumAmount,
 	ISNULL(CurrSum.CurrSumCount, 0) as CurrSumCount,
 	convert(decimal, ISNULL(PrevSum.PrevSumAmount, 0))/100 as PrevSumAmount,
@@ -187,11 +193,9 @@ from
 	on
 		UnusualMerchant.MerchantNo = LastYearSum.MerchantNo
 	left join
-	DimMerchant
+	Table_MerInfo MerInfo
 	on
-		UnusualMerchant.MerchantNo = DimMerchant.MerchantNo
-where
-	DimMerchant.MerchantName not like '%基金管理%';
+		UnusualMerchant.MerchantNo = MerInfo.MerchantNo;
 		
 --8. Clear temp tables
 drop table #UnusualMerchantList;
