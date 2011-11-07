@@ -5,9 +5,9 @@ end
 go
 
 create procedure Proc_QueryBizCategoryReport
-	@StartDate datetime = '2011-10-20',
-	@PeriodUnit nchar(4) = N'周',
-	@BizCategory nchar(10) = N'互联宝',
+	@StartDate datetime = '2011-10-01',
+	@PeriodUnit nchar(4) = N'月',
+	@BizCategory nchar(10) = N'代扣',
 	@EndDate datetime = '2011-09-30'
 as
 begin
@@ -421,7 +421,7 @@ begin
 	
 	select
 		MerchantList.MerchantNo,
-		(select MerchantName from DimMerchant where MerchantNo = MerchantList.MerchantNo) MerchantName,
+		(select MerchantName from Table_MerInfo where MerchantNo = MerchantList.MerchantNo) MerchantName,
 		ISNULL(Result.SucceedAmount, 0) SucceedAmount,
 		ISNULL(Result.SucceedCount, 0) SucceedCount,
 		Result.AvgAmount,
