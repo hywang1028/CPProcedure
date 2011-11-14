@@ -5,21 +5,21 @@ end
 go
 
 create procedure Proc_QueryCPMerchantTransReport
-	@StartDate as datetime = '2011-09-01',
-	@EndDate as datetime = '2011-09-30',
-	@BizCategory as nchar(10) = '信用卡还款'
+	@StartDate as datetime = '2011-10-01',
+	@EndDate as datetime = '2011-10-31',
+	@BizCategory as nchar(10) = '代收类'
 as
 begin
 
 --1. Check input
-	if (@StartDate is null or @EndDate is null or ISNULL(@BizCategory,N'') = N'')
-	begin
-		raiserror(N'Input params cannot be empty in Proc_QueryCPMerchantTransReport', 16, 1);
-	end;
+if (@StartDate is null or @EndDate is null or ISNULL(@BizCategory,N'') = N'')
+begin
+	raiserror(N'Input params cannot be empty in Proc_QueryCPMerchantTransReport', 16, 1);
+end;
 	
 --2. Prepare task
 --2.1 Prepare @EndDate
-	set @EndDate = DATEADD(day,1,@EndDate);
+set @EndDate = DATEADD(day,1,@EndDate);
 
 --2.2 Get DailyTrans during the period
 --2.2.1 Create Table #PeriodSumValue
@@ -47,11 +47,11 @@ Create Table #PeriodSumValue
 	from
 		FactDailyTrans Trans
 		inner join 
-		DimGate
+		Table_GateRoute Gate
 		on 
-			Trans.GateID = DimGate.GateID				
+			Trans.GateNo = Gate.GateNo				
 		inner join
-		DimMerchant Merchant
+		Table_MerInfo Merchant
 		on
 			Trans.MerchantNo = Merchant.MerchantNo
 	where
@@ -59,7 +59,7 @@ Create Table #PeriodSumValue
 		and
 		Trans.DailyTransDate < @EndDate
 		and
-		DimGate.GateNo not in ('5003', '5005', '5009', '5022', '5026', '5015','5023', '5021', '7008','0044','0045')
+		Gate.GateNo not in ('5003', '5005', '5009', '5022', '5026', '5015','5023', '5021', '7008','0044','0045')
 	group by
 		Trans.MerchantNo,
 		Merchant.MerchantName;
@@ -81,11 +81,11 @@ Create Table #PeriodSumValue
 	from
 		FactDailyTrans Trans
 		inner join 
-		DimGate
+		Table_GateRoute Gate
 		on 
-			Trans.GateID = DimGate.GateID
+			Trans.GateNo = Gate.GateNo
 		inner join
-		DimMerchant Merchant
+		Table_MerInfo Merchant
 		on
 			Trans.MerchantNo = Merchant.MerchantNo
 	where
@@ -93,7 +93,7 @@ Create Table #PeriodSumValue
 		and
 		Trans.DailyTransDate < @EndDate
 		and
-		DimGate.GateNo in ('5003', '5005', '5009', '5022', '5026', '5015', '5021','5023')
+		Gate.GateNo in ('5003', '5005', '5009', '5022', '5026', '5015', '5021','5023')
 	group by
 		Trans.MerchantNo,
 		Merchant.MerchantName;
@@ -115,11 +115,11 @@ else if(@BizCategory = N'代收类')
 	from
 		FactDailyTrans Trans
 		inner join 
-		DimGate
+		Table_GateRoute Gate
 		on 
-			Trans.GateID = DimGate.GateID
+			Trans.GateNo = Gate.GateNo
 		inner join
-		DimMerchant Merchant
+		Table_MerInfo Merchant
 		on
 			Trans.MerchantNo = Merchant.MerchantNo
 	where
@@ -127,7 +127,7 @@ else if(@BizCategory = N'代收类')
 		and
 		Trans.DailyTransDate < @EndDate
 		and
-		DimGate.GateNo in ('7008')
+		Gate.GateNo in ('7008')
 	group by
 		Trans.MerchantNo,
 		Merchant.MerchantName;
@@ -149,11 +149,11 @@ else if(@BizCategory = N'基金定投类')
 	from
 		FactDailyTrans Trans
 		inner join 
-		DimGate
+		Table_GateRoute Gate
 		on 
-			Trans.GateID = DimGate.GateID
+			Trans.GateNo = Gate.GateNo
 		inner join
-		DimMerchant Merchant
+		Table_MerInfo Merchant
 		on
 			Trans.MerchantNo = Merchant.MerchantNo
 	where
@@ -161,7 +161,7 @@ else if(@BizCategory = N'基金定投类')
 		and
 		Trans.DailyTransDate < @EndDate
 		and
-		DimGate.GateNo in ('0044','0045')
+		Gate.GateNo in ('0044','0045')
 	group by
 		Trans.MerchantNo,
 		Merchant.MerchantName;
@@ -235,7 +235,7 @@ else if(@BizCategory = N'代付类')
 		Trans.BankNo MerchantNo,
 		Trans.BankName MerchantName,
 	    SUM(Trans.RepaymentCount) AS SucceedCount,
-		Convert(Decimal,SUM(Trans.RepaymentAmount))/100 AS SucceedAmount
+		SUM(Trans.RepaymentAmount) AS SucceedAmount
 	from
 		Table_CreditCardPayment Trans
 	where

@@ -7,13 +7,12 @@ go
 create procedure Proc_QueryBizCategoryEMALLReport
 	@StartDate datetime = '2011-09-01',
 	@PeriodUnit nchar(4) = N'月',
-	@BizCategory nchar(10) = N'商城',
-	@EndDate datetime = '2011-05-30'
+	@EndDate datetime = '2011-09-30'
 as
 begin
 
 --1. Check input
-if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'' or ISNULL(@BizCategory, N'') = N''  or (@PeriodUnit = N'自定义' and @EndDate is null))
+if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'' or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin
 	raiserror(N'Input params cannot be empty in Proc_QueryBizCategoryEMALLReport', 16, 1);
 end

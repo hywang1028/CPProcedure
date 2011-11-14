@@ -5,10 +5,10 @@ end
 go
 
 create procedure Proc_QueryBizCategoryReport
-	@StartDate datetime = '2011-07-01',
+	@StartDate datetime = '2011-10-01',
 	@PeriodUnit nchar(4) = N'月',
-	@BizCategory nchar(10) = N'代付',
-	@EndDate datetime = '2011-05-30'
+	@BizCategory nchar(10) = N'代扣',
+	@EndDate datetime = '2011-09-30'
 as
 begin
 
@@ -338,7 +338,7 @@ select
 	case @BizCategory when N'代付'
 	then (select MerchantName from Table_OraMerchants where MerchantNo = Coalesce(Curr.MerchantNo, Prev.MerchantNo, LastYear.MerchantNo, ThisYearRunning.MerchantNo))
 	else
-		 (select MerchantName from DimMerchant where MerchantNo = Coalesce(Curr.MerchantNo, Prev.MerchantNo, LastYear.MerchantNo, ThisYearRunning.MerchantNo))
+		 (select MerchantName from Table_MerInfo where MerchantNo = Coalesce(Curr.MerchantNo, Prev.MerchantNo, LastYear.MerchantNo, ThisYearRunning.MerchantNo))
 	end MerchantName,
 	convert(decimal, ISNULL(Curr.SucceedAmount, 0))/1000000 SucceedAmount,
 	Convert(decimal, ISNULL(Curr.SucceedCount, 0))/10000 SucceedCount,
@@ -421,7 +421,7 @@ begin
 	
 	select
 		MerchantList.MerchantNo,
-		(select MerchantName from DimMerchant where MerchantNo = MerchantList.MerchantNo) MerchantName,
+		(select MerchantName from Table_MerInfo where MerchantNo = MerchantList.MerchantNo) MerchantName,
 		ISNULL(Result.SucceedAmount, 0) SucceedAmount,
 		ISNULL(Result.SucceedCount, 0) SucceedCount,
 		Result.AvgAmount,
