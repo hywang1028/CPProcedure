@@ -99,8 +99,8 @@ select * from #ByMerchantData;
 	
 --3.2 All
 SELECT  
-	GateNo,
-	ApplyDate,
+	B.GateNo,
+	B.ApplyDate,
 	LEFT(UserList,LEN(UserList)-1) as GateDescrip 
 into
 	#Temp
@@ -121,22 +121,44 @@ FROM (
 		FROM 
 			#TempData A   
 		GROUP BY 
-			GateNo,
-			ApplyDate  
-)B ;
-
+			GateNo,ApplyDate  
+)B;
+select 
+	GateNo,
+	MAX(ApplyDate) ApplyDate
+into
+	#DateNewRule
+from 
+	Table_GateCostRule
+group by
+	GateNo;
 select
+	Temp.*
+into
+	#Temp2
+from
+	#DateNewRule DateNew
+	inner join
+	#Temp Temp
+	on
+		Temp.GateNo = DateNew.GateNo
+		and
+		Temp.ApplyDate = DateNew.ApplyDate;
+select
+	--Temp.GateNo as [网关号],
+	--Gate.GateDesc as '网关名称',
+	--Convert(char,Temp.ApplyDate,102) as '开始生效日期',
+	--Temp.GateDescrip as '成本计算规则'
 	Gate.GateNo as GateNo,
 	Gate.GateDesc as GateName,
-	Convert(char,Temp.ApplyDate,102) as ApplyDate,
-	Temp.GateDescrip as CostCalculateRule
+	Convert(char,Temp2.ApplyDate,102) as ApplyDate,
+	Temp2.GateDescrip as CostCalculateRule
 from
 	Table_GateRoute Gate
 	left join
-	#Temp Temp
+	#Temp2 Temp2
 	on
-		Temp.GateNo = Gate.GateNo;
-
+		Gate.GateNo = Temp2.GateNo;
 
 --4.Drop Table
 drop table #ByTransData;
@@ -144,6 +166,7 @@ drop table #ByYearData;
 drop table #ByMerchantData;
 drop table #TempData;
 drop table #Temp;
+drop table #DateNewRule;
+drop table #Temp2;
 
 end
-
