@@ -54,17 +54,17 @@ select
 			  when ByYear.GateGroup = 0
 				then N'包年年费为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元' end)
 			when ByYear.FeeType = 'Split'
-			then N'分润，成本暂先为0' End)
+			then N'分润，分润比为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue*100))) + N'%' End)
 	when ByYear.RefMinAmt = 0 and ByYear.RefMaxAmt <> @MAX
 	then (case when ByYear.FeeType = 'Fixed' 
 			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元以下的年费为' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元'
 			when ByYear.FeeType = 'Split'
-			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元以下的按分润计费，成本暂先为0' End)
+			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元以下的按分润，分润比为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue*100))) + N'%' End)
 	when ByYear.RefMinAmt <> 0 and ByYear.RefMaxAmt = @MAX
 	then (case when ByYear.FeeType = 'Fixed' 
 			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元以上的年费为' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元'
 			when ByYear.FeeType = 'Split'
-			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元以上的按分润计费，成本暂先为0' End)
+			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元以上的按分润，分润比为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue*100))) + N'%' End)
 	else (case when ByYear.FeeType = 'Fixed'
 			then N'年交易量在'+ RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元至' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元，年费为' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元'
 			when ByYear.FeeType = 'Percent'
