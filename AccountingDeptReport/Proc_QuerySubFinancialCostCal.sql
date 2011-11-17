@@ -5,8 +5,8 @@ end
 go
 
 create procedure Proc_QuerySubFinancialCostCal
-	@StartDate datetime = '2011-09-01',
-	@EndDate datetime = '2011-10-01'
+	@StartDate datetime = '2011-10-01',
+	@EndDate datetime = '2011-11-01'
 as
 begin
 
@@ -503,11 +503,11 @@ update
 set
 	GateMerRule.cost = (
 							case when
-								ISNULL(GateMerRule.BankFeeAmt,0) = 0
+								ISNULL(GateMerRule.FeeAmt,0) <= ISNULL(GateMerRule.InstuFeeAmt,0)
 							then
-								(GateMerRule.FeeAmt - GateMerRule.InstuFeeAmt) * CostRuleByYear.FeeValue
-							else
-								GateMerRule.BankFeeAmt
+								0
+							else	
+								(GateMerRule.FeeAmt - ISNULL(GateMerRule.InstuFeeAmt,0)) * CostRuleByYear.FeeValue
 							end
 						)
 from
