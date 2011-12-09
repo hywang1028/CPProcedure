@@ -5,9 +5,9 @@ end
 go
 
 create procedure Proc_QueryFinancialCostCalByGateNo
-	@StartDate datetime = '2011-09-01',
+	@StartDate datetime = '2011-10-01',
 	@PeriodUnit nChar(3) = '×Ô¶¨Òå',
-	@EndDate datetime = '2011-09-30'
+	@EndDate datetime = '2011-10-31'
 as
 begin
 

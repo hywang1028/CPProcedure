@@ -5,8 +5,8 @@ end
 go
 
 create procedure Proc_QuerySubFinancialCostCal
-	@StartDate datetime = '2011-10-01',
-	@EndDate datetime = '2011-11-01'
+	@StartDate datetime = '2011-07-01',
+	@EndDate datetime = '2011-08-01'
 as
 begin
 
@@ -15,10 +15,71 @@ declare @MinRef bigint;
 set @MaxRef = 100000000000000;
 set @MinRef = 0;
 
---1. CheckInput
+--1. Check
+--1.1 CheckInput
 if(@StartDate is null or @EndDate is null)
 begin
 	raiserror(N'Input params can`t be empty in Proc_QuerySubFinancialCostCal',16,1);
+end
+
+--1.2 Check GateGroup Change
+declare @TotalGateCnt int;
+declare @PartialGateCount int;
+
+set @TotalGateCnt =
+(
+	select
+		count(*)
+	from
+		Table_GateCostRule GateRule
+		inner join
+		Table_CostRuleByYear ByYear
+		on
+			GateRule.GateNo = ByYear.GateNo
+			and
+			GateRule.ApplyDate <> ByYear.ApplyDate
+		where
+			ByYear.GateGroup <>0
+)
+
+set @PartialGateCount = 
+(
+	select
+		COUNT(*)
+	from
+	(
+		select
+			ByYear.GateNo,
+			ByTrans.ApplyDate
+		from
+			Table_CostRuleByYear ByYear
+			inner join
+			Table_CostRuleByTrans ByTrans
+			on
+				ByYear.GateNo = ByTrans.GateNo
+				and
+				ByYear.ApplyDate <> ByTrans.ApplyDate
+		where
+			ByYear.GateGroup <> 0
+		union all
+		select
+			ByYear.GateNo,
+			ByMer.ApplyDate
+		from
+			Table_CostRuleByYear ByYear
+			inner join
+			Table_CostRuleByMer ByMer
+			on
+				ByYear.GateNo = ByMer.GateNo
+				and
+				ByYear.ApplyDate <> ByMer.ApplyDate
+		where
+			ByYear.GateGroup <> 0
+	)T
+)
+if(@TotalGateCnt <> @PartialGateCount)
+begin
+	raiserror(N'GateGroupRule is not changed both in Table_GateCostRule and Table_CostRuleBy(Trans,Year,Mer)',16,1);
 end
 
 
@@ -415,7 +476,6 @@ from
 where
 	GateGroup <> 0;
 	
-
 With GroupGateSumAmt as
 (
 	select
