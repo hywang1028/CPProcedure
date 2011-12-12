@@ -54,17 +54,17 @@ select
 			  when ByYear.GateGroup = 0
 				then N'包年年费为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元' end)
 			when ByYear.FeeType = 'Split'
-			then N'分润，成本暂先为0' End)
+			then N'分润，分润比为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue*100))) + N'%' End)
 	when ByYear.RefMinAmt = 0 and ByYear.RefMaxAmt <> @MAX
 	then (case when ByYear.FeeType = 'Fixed' 
 			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元以下的年费为' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元'
 			when ByYear.FeeType = 'Split'
-			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元以下的按分润计费，成本暂先为0' End)
+			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元以下的按分润，分润比为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue*100))) + N'%' End)
 	when ByYear.RefMinAmt <> 0 and ByYear.RefMaxAmt = @MAX
 	then (case when ByYear.FeeType = 'Fixed' 
 			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元以上的年费为' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元'
 			when ByYear.FeeType = 'Split'
-			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元以上的按分润计费，成本暂先为0' End)
+			then N'年交易量在' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元以上的按分润，分润比为' +  RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue*100))) + N'%' End)
 	else (case when ByYear.FeeType = 'Fixed'
 			then N'年交易量在'+ RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMinAmt/1000000))) + N'万元至' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.RefMaxAmt/1000000))) + N'万元，年费为' + RTrim(Convert(char,Convert(Decimal(15,0),ByYear.FeeValue/1000000))) + N'万元'
 			when ByYear.FeeType = 'Percent'
@@ -99,8 +99,8 @@ select * from #ByMerchantData;
 	
 --3.2 All
 SELECT  
-	GateNo,
-	ApplyDate,
+	B.GateNo,
+	B.ApplyDate,
 	LEFT(UserList,LEN(UserList)-1) as GateDescrip 
 into
 	#Temp
@@ -121,22 +121,44 @@ FROM (
 		FROM 
 			#TempData A   
 		GROUP BY 
-			GateNo,
-			ApplyDate  
-)B ;
-
+			GateNo,ApplyDate  
+)B;
+select 
+	GateNo,
+	MAX(ApplyDate) ApplyDate
+into
+	#DateNewRule
+from 
+	Table_GateCostRule
+group by
+	GateNo;
 select
+	Temp.*
+into
+	#Temp2
+from
+	#DateNewRule DateNew
+	inner join
+	#Temp Temp
+	on
+		Temp.GateNo = DateNew.GateNo
+		and
+		Temp.ApplyDate = DateNew.ApplyDate;
+select
+	--Temp.GateNo as [网关号],
+	--Gate.GateDesc as '网关名称',
+	--Convert(char,Temp.ApplyDate,102) as '开始生效日期',
+	--Temp.GateDescrip as '成本计算规则'
 	Gate.GateNo as GateNo,
 	Gate.GateDesc as GateName,
-	Convert(char,Temp.ApplyDate,102) as ApplyDate,
-	Temp.GateDescrip as CostCalculateRule
+	Convert(char,Temp2.ApplyDate,102) as ApplyDate,
+	Temp2.GateDescrip as CostCalculateRule
 from
 	Table_GateRoute Gate
 	left join
-	#Temp Temp
+	#Temp2 Temp2
 	on
-		Temp.GateNo = Gate.GateNo;
-
+		Gate.GateNo = Temp2.GateNo;
 
 --4.Drop Table
 drop table #ByTransData;
@@ -144,6 +166,7 @@ drop table #ByYearData;
 drop table #ByMerchantData;
 drop table #TempData;
 drop table #Temp;
+drop table #DateNewRule;
+drop table #Temp2;
 
 end
-
