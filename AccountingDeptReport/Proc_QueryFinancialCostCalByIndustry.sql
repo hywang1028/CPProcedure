@@ -12,7 +12,7 @@ as
 begin
 
 
---1. CheckInput
+--1. Check Input
 if(@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or (@PeriodUnit = N'×Ô¶¨Òå' and @EndDate is null))
 begin
 	raiserror(N'Input params be empty in Proc_QueryFinancialCostCalByIndustry',16,1);

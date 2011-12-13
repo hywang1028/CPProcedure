@@ -12,89 +12,11 @@ as
 begin
 
 
---1 Check
---1.1 CheckInput
+--1 Check Input
 if(@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or (@PeriodUnit = N'×Ô¶¨Òå' and @EndDate is null))
 begin
 	raiserror(N'Input params be empty in Proc_QueryIndustryProfitCalc',16,1);
 end
-
-----1.2 Check Unchanged Rule GateNo
-----1.2.1 Find all grouped GateNo
---select
---	GateNo,
---	ApplyDate,
---	GateGroup
---into
---	#GroupGate
---from
---	Table_CostRuleByYear
---where
---	GateGroup <> 0;
-	
-----1.2.2 Get NextApplyDate for #GroupGate
---select
---	GroupGate.GateNo,
---	GroupGate.ApplyDate,
---	GroupGate.GateGroup,
---	MIN(isnull(GateCostRule.ApplyDate, '9999-01-01')) NextApplyDate
---into
---	#GroupGateWithNextApplyDate
---from
---	#GroupGate GroupGate
---	left join
---	Table_GateCostRule GateCostRule
---	on
---		GroupGate.GateNo = GateCostRule.GateNo
---		and
---		GroupGate.ApplyDate < GateCostRule.ApplyDate
---group by
---	GroupGate.GateNo,
---	GroupGate.ApplyDate,
---	GroupGate.GateGroup;
-	
-
-----1.2.3 Calc count by GateGroup,ApplyDate
---select
---	GateGroup,
---	ApplyDate,
---	COUNT(*) cnt
---into
---	#GateCnt1	
---from
---	#GroupGateWithNextApplyDate
---group by
---	GateGroup,
---	ApplyDate;
-
-----1.2.4 Calc count by GateGroup,ApplyDate,NextApplyDate
---select
---	GateGroup,
---	ApplyDate,
---	NextApplyDate,
---	COUNT(*) cnt
---into
---	#GateCnt2	
---from
---	#GroupGateWithNextApplyDate
---group by
---	GateGroup,
---	ApplyDate,
---	NextApplyDate;
-
-----1.2.5 Compare counts
---select distinct
---	GC1.GateGroup
---from
---	#GateCnt1 GC1
---	inner join
---	#GateCnt2 GC2
---	on
---		GC1.GateGroup = GC2.GateGroup
---		and
---		GC1.ApplyDate = GC2.ApplyDate
---where
---	GC1.cnt <> GC2.cnt;
 
 
 --2.Prepare StartDate and EndDate
