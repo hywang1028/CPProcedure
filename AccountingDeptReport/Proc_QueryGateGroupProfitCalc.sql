@@ -1,24 +1,24 @@
-if OBJECT_ID(N'Proc_QueryGateNoProfitCalc',N'P') is not null
+if OBJECT_ID(N'Proc_QueryGateGroupProfitCalc',N'P') is not null
 begin
-	drop procedure Proc_QueryGateNoProfitCalc;
+	drop procedure Proc_QueryGateGroupProfitCalc;
 end
 go
 
-create procedure Proc_QueryGateNoProfitCalc
-	@StartDate datetime = '2011-10-01',
-	@PeriodUnit nchar(3) = N'月',
+create procedure Proc_QueryGateGroupProfitCalc
+	@StartDate datetime = '2011-11-01',
+	@PeriodUnit nChar(3) = N'月',
 	@EndDate datetime = '2011-10-31'
 as
 begin
 
---1 Check Input
+--1.Check Input
 if(@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or (@PeriodUnit = N'自定义' and @EndDate is null))
 begin
-	raiserror(N'Input Params can`t be empty in Proc_QueryGateNoProfitCalc!',16,1);
-end	
-	
-	
---2.Prepare Datetime parameter
+	raiserror(N'Input Params can`t be empty in Proc_QueryGateGroupProfitCalc!',16,1);
+end
+
+
+--2.Initial StartDate and EndDate
 declare @CurrStartDate datetime;
 declare @CurrEndDate  datetime;
 declare @PrevStartDate datetime;
@@ -79,10 +79,10 @@ begin
 	set @PrevEndDate = @CurrStartDate;
 	set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);
 	set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);
-end	
-	
-	
---3. Get PeriodUnit TransData
+end
+
+
+--3. Get Curr TransData
 create table #Curr
 (
 	GateNo char(4) not null,
@@ -92,17 +92,29 @@ create table #Curr
 	Cost decimal(15,4) not null
 );
 
-insert into 
+insert into
 	#Curr
 exec 
 	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate;
-	
---4.Calculate The Profit
-With FeeCalcResult as
+
+
+--4.Get CurrentSum Data And SumFeeAmt&InstuFeeAmt
+with CurrSum as
 (
 	select
 		GateNo,
-		MerchantNo,
+		SUM(ISNULL(TransSumCount,0)) SumCount,
+		SUM(ISNULL(TransSumAmount,0))SumAmount,
+		SUM(ISNULL(Cost,0)) Cost
+	from	
+		#Curr 
+	group by
+		GateNo
+),
+FeeCalcResult as
+(
+	select
+		GateNo,
 		SUM(ISNULL(FeeAmt,0)) FeeAmt,
 		SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt
 	from
@@ -112,58 +124,43 @@ With FeeCalcResult as
 		and
 		FeeEndDate < @CurrEndDate
 	group by
-		GateNo,
-		MerchantNo
+		GateNo
 )
+
+
+--5.Get Result
 select
+	case when
+		GateCate.GateCategory1 is null	
+	then
+		 N'其他'
+	else
+		GateCate.GateCategory1
+	end GateCategory1,	
 	Curr.GateNo,
-	Curr.MerchantNo,
-	Curr.TransSumCount,
-	convert(decimal,Curr.TransSumAmount)/100 TransSumAmount,
-	FeeCalcResult.FeeAmt,
-	Curr.Cost/100 Cost,
-	FeeCalcResult.InstuFeeAmt
-into
-	#ResultWithProfit
-from
-	#Curr Curr
-	left join
-	FeeCalcResult FeeCalcResult
-	on
-		Curr.GateNo = FeeCalcResult.GateNo
-		and
-		Curr.MerchantNo = FeeCalcResult.MerchantNo;
-
-
---5.Get Gate&Merchant Description
-select
-	ResultProfit.GateNo,
 	GateRoute.GateDesc,
-	ResultProfit.MerchantNo,
-	MerInfo.MerchantName,
-	ResultProfit.TransSumCount,
-	ResultProfit.TransSumAmount,
-	ResultProfit.FeeAmt,
-	ResultProfit.Cost,
-	ResultProfit.InstuFeeAmt
+	Curr.SumCount,
+	convert(decimal,Curr.SumAmount)/100 SumAmount,
+	FeeResult.FeeAmt,
+	FeeResult.InstuFeeAmt,
+	convert(decimal(15,4),Curr.Cost)/100 Cost
 from
-	#ResultWithProfit ResultProfit
+	CurrSum Curr
+	left join
+	Table_GateCategory GateCate
+	on
+		Curr.GateNo = GateCate.GateNo
 	inner join
 	Table_GateRoute GateRoute
 	on
-		ResultProfit.GateNo = GateRoute.GateNo
+		Curr.GateNo = GateRoute.GateNo
 	inner join
-	Table_MerInfo MerInfo
+	FeeCalcResult FeeResult
 	on
-		ResultProfit.MerchantNo = MerInfo.MerchantNo
-order by
-	ResultProfit.GateNo,
-	ResultProfit.MerchantNo; 
+		Curr.GateNo = FeeResult.GateNo;
+	
 
-
---6.Drop The Temporary Tables
-
+--6. Drop Temporary Tables
 drop table #Curr;
-drop table #ResultWithProfit;
 
 end

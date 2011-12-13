@@ -57,7 +57,7 @@ else if(@PeriodUnit = N'°ëÄê')
 begin
 	set @CurrStartDate = @StartDate;
 	set @CurrEndDate = DATEADD(QUARTER,2,@StartDate);
-	set @PrevStartDate = DATEADD(QUARTER,-1,@CurrStartDate);
+	set @PrevStartDate = DATEADD(QUARTER,-2,@CurrStartDate);
 	set @PrevEndDate = @CurrStartDate;
 	set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);
 	set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);
