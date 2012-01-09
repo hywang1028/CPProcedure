@@ -6,7 +6,7 @@ go
 
 create procedure Proc_QueryUnusualMerchantReport
 	@StartDate as datetime = '2011-10-20',
-	@PeriodUnit as nchar(2) = N'÷‹',
+	@PeriodUnit as nchar(4) = N'÷‹',
 	@MonthPeriod as tinyint = 2,
 	@TopNum as smallint	 = 120,
 	@EndDate datetime = '2011-05-30'
