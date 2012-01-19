@@ -5,9 +5,9 @@ end
 go
 
 create procedure Proc_QueryFeeCheckSum
-	@StartDate datetime = '2011-10-01',
-	@EndDate datetime = '2011-12-01',
-	@Type nvarchar(2) = N'ÖÜ'
+	@StartDate datetime = '2012-01-01',
+	@EndDate datetime = '2012-01-20',
+	@Type nvarchar(2) = N'ÔÂ'
 as 
 begin
 
@@ -29,7 +29,7 @@ select
 	PurCnt,
 	FeeAmt,
 	InstuFeeAmt,
-	TransSumAmt,
+	convert(decimal,TransSumAmt)/100 TransSumAmt,
 	TransSumCnt,
 	CheckEndDate,
 	PeriodUnit
@@ -86,11 +86,10 @@ group by
 
 --2.4 Get Week TransSum Data From CP Table_FeeTransLog
 select
-	convert(decimal,isnull(SUM(FeeTransLog.TransAmt), 0))/100 TransSumAmt,
-	isnull(COUNT(1),0) TransSumCnt,
+	FeeTransLog.TransAmt,
 	BatchNoLog.CheckEndDate
 into
-	#TransLogWeek
+	#LogWeek
 from
 	(
 		select distinct
@@ -108,9 +107,18 @@ from
 	inner join
 	Table_FeeTransLog FeeTransLog                        
 	on
-		BatchNoLog.FeeBatchNo = FeeTransLog.FeeBatchNo
+		BatchNoLog.FeeBatchNo = FeeTransLog.FeeBatchNo;
+	
+select
+	convert(decimal,SUM(TransAmt))/100 TransSumAmt,
+	COUNT(1) TransSumCnt,
+	CheckEndDate
+into
+	#TransLogWeek
+from
+	#LogWeek
 group by
-	BatchNoLog.CheckEndDate;
+	CheckEndDate;
 
 --2.5 Get Comparison Result
 select
@@ -185,7 +193,8 @@ from
 --2.6 Drop Temporary Table
 drop table #FeeCheckSumWeek;
 drop table #FeeResultWeek;
-drop table #FeeResultWeekDetailCheck
+drop table #FeeResultWeekDetailCheck;
+drop table #LogWeek;
 drop table #TransLogWeek;
 
 end
@@ -200,7 +209,7 @@ select
 	PurCnt,
 	FeeAmt,
 	InstuFeeAmt,
-	TransSumAmt,
+	convert(decimal,TransSumAmt)/100 TransSumAmt,
 	TransSumCnt,
 	CheckEndDate,
 	PeriodUnit
@@ -257,11 +266,10 @@ group by
 
 --3.4 Get Month TransSum Data From CP Table_FeeTransLog
 select
-	convert(decimal,isnull(SUM(FeeTransLog.TransAmt),0))/100 TransSumAmt,
-	isnull(COUNT(1),0) TransSumCnt,
+	FeeTransLog.TransAmt,
 	BatchNoLog.CheckEndDate
 into
-	#TransLogMonth
+	#LogMonth
 from
 	(
 		select distinct
@@ -279,9 +287,18 @@ from
 	inner join
 	Table_FeeTransLog FeeTransLog                         
 	on
-		BatchNoLog.FeeBatchNo = FeeTransLog.FeeBatchNo
+		BatchNoLog.FeeBatchNo = FeeTransLog.FeeBatchNo;
+		
+select
+	convert(decimal,SUM(TransAmt))/100 TransSumAmt,
+	COUNT(1) TransSumCnt,
+	CheckEndDate
+into	
+	#TransLogMonth
+from
+	#LogMonth
 group by
-	BatchNoLog.CheckEndDate;
+	CheckEndDate;
 
 --3.5 Get Comparison Result
 select
@@ -356,7 +373,8 @@ from
 --3.6 Drop Temporary Table
 drop table #FeeCheckSumMonth;
 drop table #FeeResultMonth;
-drop table #FeeResultMonthDetailCheck
+drop table #FeeResultMonthDetailCheck;
+drop table #LogMonth;
 drop table #TransLogMonth;
 
 end
