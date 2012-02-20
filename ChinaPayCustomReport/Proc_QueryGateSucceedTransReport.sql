@@ -6,7 +6,7 @@ go
 
 create procedure Proc_QueryGateSucceedTransReport
 	@StartDate datetime = '2011-09-01',
-	@PeriodUnit nchar(4) = N'月',
+	@PeriodUnit nchar(4) = N'年',
 	@MeasureCategory nchar(10) = N'成功金额'
 as
 begin
@@ -143,9 +143,9 @@ begin
 	(
 	GateNo char(4) not null,
 	MerchantNo nchar(20) not null,
-	CurrSumValue Decimal(12,6) not null,
-	PrevSumValue Decimal(12,6) not null,
-	LastYearSumValue Decimal(12,6) not null
+	CurrSumValue Decimal(12,3) not null,
+	PrevSumValue Decimal(12,3) not null,
+	LastYearSumValue Decimal(12,3) not null
 	);
 
 	insert into #SumValue
