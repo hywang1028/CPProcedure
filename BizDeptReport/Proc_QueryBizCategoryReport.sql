@@ -107,7 +107,7 @@ end
 else if @BizCategory = N'╢З©ш'
 begin
 	set @whereCondition = N'
-	GateNo in (''7008'')
+	GateNo in (''7008'', ''7002'')
 	'
 end
 else if @BizCategory = N'илЁг'
