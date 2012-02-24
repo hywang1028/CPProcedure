@@ -5,9 +5,9 @@ end
 go
 
 create procedure Proc_Query2012UnionPayMerTransReport
-	@StartDate datetime = '2011-08-01',
+	@StartDate datetime = '2012-01-01',
 	@PeriodUnit nchar(4) = N'月',
-	@EndDate datetime = '2011-08-31'
+	@EndDate datetime = '2012-02-01'
 as
 begin
 
@@ -110,9 +110,7 @@ into
 from
 	#PaymentData
 where
-	GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in('MOTO','CUPSecure','UPOP'))
-	and
-	GateNo <> '7008'
+	GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in('MOTO','CUPSecure','UPOP',N'代扣'))
 group by
 	MerchantNo;
 	
@@ -131,6 +129,20 @@ group by
 	MerchantNo;
 
 --3.1.3 Prepare '代收类' Data
+select
+	MerchantNo,
+	SUM(TransCnt) TransCnt,
+	SUM(TransAmt) TransAmt
+into
+	#DeductionData
+from
+	#PaymentData
+where
+	GateNo in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
+group by
+	MerchantNo;
+
+--3.1.3 Prepare '代付类' Data
 With ORATransData as
 (
 	select
@@ -143,19 +155,6 @@ With ORATransData as
 		CPDate >= @CurrStartDate
 		and
 		CPDate <  @CurrEndDate
-	group by
-		MerchantNo
-),
-Gate7008TransData as
-(
-	select
-		MerchantNo,
-		SUM(TransCnt) TransCnt,
-		SUM(TransAmt) TransAmt
-	from
-		#PaymentData
-	where
-		GateNo = '7008'
 	group by
 		MerchantNo
 ),
@@ -175,8 +174,6 @@ WUTransData as
 		MerchantNo
 )
 select * into #ORAWUTransData from ORATransData
-union
-select * from Gate7008TransData
 union
 select * from WUTransData;
 
@@ -234,7 +231,9 @@ select
 	ISNULL(Consume.TransCnt,0) as ConsumeTransCnt,
 	ISNULL(Consume.TransAmt,0) as ConsumeTransAmt,
 	ISNULL(MOTO.TransCnt,0) as MOTOTransCnt,
-	ISNULL(MOTO.TransAmt,0) as MOTOTRansAmt,
+	ISNULL(MOTO.TransAmt,0) as MOTOTransAmt,
+	ISNULL(Deduct.TransCnt,0) as DeductTransCnt,
+	ISNULL(Deduct.TransAmt,0) as DeductTransAmt,
 	ISNULL(ORA.TransCnt,0) as ORATransCnt,
 	ISNULL(ORA.TransAmt,0) as ORATransAmt,
 	ISNULL(IUCD.TransCnt,0) as AllTransCnt,
@@ -251,6 +250,10 @@ from
 	#MOTOTransData MOTO
 	on
 		IUCD.MerchantNo = MOTO.MerchantNo
+	left join
+	#DeductionData Deduct
+	on
+		IUCD.MerchantNo = Deduct.MerchantNo
 	left join
 	#ORAWUTransData ORA
 	on
@@ -277,7 +280,7 @@ With UnionUMSChannel as
 OtherChannel as
 (
 	select
-		ISNULL(BranchOffice.UnionPaySpec,N'') as BranchOffice,
+		coalesce(BranchOffice.UnionPaySpec,Sales.Area) as BranchOffice,
 		Sales.MerchantName,
 		Sales.MerchantNo,
 		Sales.IndustryName
@@ -310,7 +313,9 @@ select
 	ISNULL(Trans.ConsumeTransCnt,0) ConsumeTransCnt,
 	ISNULL(Trans.ConsumeTransAmt,0) ConsumeTransAmt,
 	ISNULL(Trans.MOTOTransCnt,0) MOTOTransCnt,
-	ISNULL(Trans.MOTOTRansAmt,0) MOTOTRansAmt,
+	ISNULL(Trans.MOTOTransAmt,0) MOTOTransAmt,
+	ISNULL(Trans.DeductTransCnt,0) DeductTransCnt,
+	ISNULL(Trans.DeductTransAmt,0) DeductTransAmt,
 	ISNULL(Trans.ORATransCnt,0) ORATransCnt,
 	ISNULL(Trans.ORATransAmt,0) ORATransAmt,
 	ISNULL(Trans.AllTransCnt,0) AllTransCnt,
@@ -326,8 +331,8 @@ from
 
 --3.2.3 Join All Config Data
 select
-	AllMerTrans.BranchOffice,
-	AllMerTrans.MerchantNo,
+	ISNULL(AllMerTrans.BranchOffice,N'') BranchOffice,
+	coalesce(AllMerTrans.MerchantNo,PayMer.MerchantNo,ORAMer.MerchantNo) MerchantNo,
 	coalesce(AllMerTrans.MerchantName,PayMer.MerchantName,ORAMer.MerchantName) MerchantName,
 	N'88020000' as InstuNo,
 	case when ISNULL(Industry.UnionPayIndustryName,N'')=N'' and ISNULL(AllMerTrans.IndustryName,N'')=N'' then N'未配置'
@@ -339,21 +344,23 @@ select
 	ISNULL(AllMerTrans.ConsumeTransCnt,0) ConsumeTransCnt,
 	ISNULL(AllMerTrans.ConsumeTransAmt,0) ConsumeTransAmt,
 	ISNULL(AllMerTrans.MOTOTransCnt,0) MOTOTransCnt,
-	ISNULL(AllMerTrans.MOTOTRansAmt,0) MOTOTRansAmt,
+	ISNULL(AllMerTrans.MOTOTransAmt,0) MOTOTransAmt,
+	ISNULL(AllMerTrans.DeductTransCnt,0) DeductTransCnt,
+	ISNULL(AllMerTrans.DeductTransAmt,0) DeductTransAmt,
 	ISNULL(AllMerTrans.ORATransCnt,0) ORATransCnt,
 	ISNULL(AllMerTrans.ORATransAmt,0) ORATransAmt,
 	ISNULL(AllMerTrans.AllTransCnt,0) AllTransCnt,
 	ISNULL(AllMerTrans.AllTransAmt,0) AllTransAmt
 from
 	#AllMerTransData AllMerTrans
-	left join
+	full outer join
 	Table_MerInfo PayMer
 	on
 		AllMerTrans.MerchantNo = PayMer.MerchantNo
-	left join
+	full outer join
 	Table_OraMerchants ORAMer
 	on
-		AllMerTrans.MerchantNo = ORAMer.MerchantNo
+		coalesce(AllMerTrans.MerchantNo,PayMer.MerchantNo) = ORAMer.MerchantNo
 	left join
 	Table_IndustryNameRule Industry
 	on
@@ -364,6 +371,7 @@ order by
 --4. Drop Table
 Drop Table #ConsumeTransData;
 Drop Table #MOTOTransData;
+Drop Table #DeductionData;
 Drop Table #ORAWUTransData;
 Drop Table #PaymentData;
 Drop Table #IncludeUPOPCUPData;
