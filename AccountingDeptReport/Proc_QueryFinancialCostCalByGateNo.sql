@@ -86,6 +86,7 @@ create table #Curr
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4) not null
@@ -100,6 +101,7 @@ create table #Prev
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4) not null
@@ -114,6 +116,7 @@ create table #LastYear
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4) not null
@@ -226,7 +229,6 @@ from
 	on
 		Result.GateNo = GateCate.GateNo;
 
-	
 --7. drop temporary table
 drop table #Curr;
 drop table #Prev;

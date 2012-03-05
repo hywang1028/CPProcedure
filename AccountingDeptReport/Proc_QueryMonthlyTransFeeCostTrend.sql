@@ -30,24 +30,6 @@ DECLARE @PeriodEnd datetime;
 SET @PeriodStart = @StartDate;  
 SET @PeriodEnd = DATEADD(month, 1, @PeriodStart);
 
-create table #GateMerCostResult
-(
-	GateNo char(4) not null,
-	MerchantNo char(20) not null,
-	TransSumCount bigint not null,
-	TransSumAmount bigint not null,
-	Cost decimal(15,4) not null
-);
-
-create table #MonthlyGateMerCostResult
-(
-	PeriodStart Datetime not null,
-	GateNo char(4) not null,
-	MerchantNo char(20) not null,
-	TransSumCount bigint not null,
-	TransSumAmount bigint not null,
-	Cost decimal(15,4) not null
-);
 WHILE (@PeriodEnd < @EndDate)   
 BEGIN   
 	 INSERT INTO #TimePeriod  
@@ -60,32 +42,10 @@ BEGIN
 		  @PeriodStart,  
 		  @PeriodEnd  
 	 );  
-	 insert into #GateMerCostResult
-	 exec Proc_QuerySubFinancialCostCal @PeriodStart,@PeriodEnd;
 	 
-	 insert into #MonthlyGateMerCostResult
-	 select 
-		@PeriodStart as PeriodStart,
-		*
-	 from
-		#GateMerCostResult;
-		
-	 truncate table #GateMerCostResult;
 	 SET @PeriodStart = @PeriodEnd;  
 	 SET @PeriodEnd = DATEADD(month, 1, @PeriodStart);  
 END  
-
-insert into #GateMerCostResult
-exec Proc_QuerySubFinancialCostCal @PeriodStart,@PeriodEnd;
-
-insert into #MonthlyGateMerCostResult
-select 
-	@PeriodStart as PeriodStart,
-	*
-from
-	#GateMerCostResult; 
-	
-truncate table #GateMerCostResult;   
 INSERT INTO #TimePeriod  
 (  
 	 PeriodStart,   
@@ -97,6 +57,41 @@ VALUES
 	 @EndDate
 ); 
 
+create table #GateMerCostResult
+(
+	GateNo char(4) not null,
+	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
+	TransSumCount bigint not null,
+	TransSumAmount bigint not null,
+	Cost decimal(15,4) not null
+);
+
+insert into #GateMerCostResult
+exec Proc_QuerySubFinancialCostCal @StartDate,@EndDate;
+
+select 
+	Period.PeriodStart,
+	GateMerCost.GateNo,
+	GateMerCost.MerchantNo,
+	SUM(ISNULL(GateMerCost.TransSumCount,0)) TransSumCount,
+	SUM(ISNULL(GateMerCost.TransSumAmount,0)) TransSumAmount,
+	SUM(ISNULL(GateMerCost.Cost,0)) Cost
+into
+	#MonthlyGateMerCostResult
+from
+	#GateMerCostResult GateMerCost
+	inner join
+	#TimePeriod Period
+	on
+		GateMerCost.FeeEndDate >= Period.PeriodStart
+		and
+		GateMerCost.FeeEndDate <  Period.PeriodEnd
+group by
+	Period.PeriodStart,
+	GateMerCost.GateNo,
+	GateMerCost.MerchantNo;  
+		
 --1.2 Prepare Payment Data
 --1.2.1 Prepare Cost Data
 select
