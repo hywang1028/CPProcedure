@@ -21,7 +21,6 @@ begin
 	raiserror(N'Input params can`t be empty in Proc_QuerySubFinancialCostCal',16,1);
 end
 
-
 --2 get dailytrans
 select
 	GateNo,
@@ -44,7 +43,6 @@ group by
 	GateNo,
 	MerchantNo,
 	FeeEndDate;
-
 
 --3. determin rule type
 
@@ -97,65 +95,40 @@ select
 	FeeResult.GateNo,
 	FeeResult.MerchantNo,
 	FeeResult.FeeEndDate,
-	FeeResult.PurCnt,
-	FeeResult.PurAmt,
+	FeeResult.PurCnt as SucceedTransCount,
+	FeeResult.PurAmt as SucceedTransAmount,
 	FeeResult.FeeAmt,
 	FeeResult.InstuFeeAmt,
 	FeeResult.BankFeeAmt,
+	CONVERT(decimal(15,4),0) as Cost,
 	isnull(GateCostRule.CostRuleType, '') as CostRuleType,
-	isnull(FeeResultWithAllApplyDate.ApplyDate,'1900-01-01') as ApplyDate,
+	isnull(FeeResultWithApplyDate.ApplyDate,'1900-01-01') as ApplyDate,
 	case when 
-		FeeResultWithAllApplyDate.NextApplyDate is null
-		or FeeResultWithAllApplyDate.NextApplyDate > @EndDate
+		FeeResultWithApplyDate.NextApplyDate is null
+		or FeeResultWithApplyDate.NextApplyDate > @EndDate
 	then
 		@EndDate
 	else
-		FeeResultWithAllApplyDate.NextApplyDate
+		FeeResultWithApplyDate.NextApplyDate
 	end as NextApplyDate
-into
-	#FeeResultWithRuleType
-from
-	#FeeResultWithAllApplyDate FeeResultWithAllApplyDate
-	inner join
-	#FeeResult FeeResult
-	on
-		FeeResultWithAllApplyDate.GateNo = FeeResult.GateNo
-		and
-		FeeResultWithAllApplyDate.MerchantNo = FeeResult.MerchantNo
-		and
-		FeeResultWithAllApplyDate.FeeEndDate = FeeResult.FeeEndDate
-	left join
-	Table_GateCostRule GateCostRule
-	on
-		FeeResultWithAllApplyDate.GateNo = GateCostRule.GateNo
-		and
-		FeeResultWithAllApplyDate.ApplyDate = GateCostRule.ApplyDate;
-				
-				
---3.4 construct #GateMerRule
-select
-	GateNo,
-	MerchantNo,
-	CostRuleType,
-	ApplyDate,
-	NextApplyDate,
-	SUM(PurCnt) SucceedTransCount,
-	SUM(PurAmt) SucceedTransAmount,
-	SUM(ISNULL(FeeAmt,0)) FeeAmt,
-	SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt,
-	SUM(ISNULL(BankFeeAmt,0)) BankFeeAmt,
-	CONVERT(decimal(15,4),0) as Cost
 into
 	#GateMerRule
 from
-	#FeeResultWithRuleType
-group by
-	GateNo,
-	MerchantNo,
-	CostRuleType,
-	ApplyDate,
-	NextApplyDate;
-	
+	#FeeResultWithAllApplyDate FeeResultWithApplyDate
+	inner join
+	#FeeResult FeeResult
+	on
+		FeeResultWithApplyDate.GateNo = FeeResult.GateNo
+		and
+		FeeResultWithApplyDate.MerchantNo = FeeResult.MerchantNo
+		and
+		FeeResultWithApplyDate.FeeEndDate = FeeResult.FeeEndDate
+	left join
+	Table_GateCostRule GateCostRule
+	on
+		FeeResultWithApplyDate.GateNo = GateCostRule.GateNo
+		and
+		FeeResultWithApplyDate.ApplyDate = GateCostRule.ApplyDate;		
 	
 --4. calculate cost value
 
@@ -183,7 +156,6 @@ where
 	and  
 	CostRuleByTrans.RefMinAmt = @MinRef;
 
-
 --4.1.2 Percent
 update
 	GateMerRule
@@ -205,16 +177,15 @@ where
 	CostRuleByTrans.RefMaxAmt = @MaxRef
 	and  
 	CostRuleByTrans.RefMinAmt = @MinRef;
-	
- 
+
 --4.1.3 DetailGateNo  
 
 --a.Get DetailPayment data
 select
 	FeeTransLog.GateNo,
 	FeeTransLog.MerchantNo,
-	FeeTransLog.TransAmt,
-	FeeCalcResult.FeeEndDate
+	FeeCalcResult.FeeEndDate,
+	FeeTransLog.TransAmt	
 into
 	#TransDetail
 from
@@ -232,82 +203,91 @@ from
 	on
 		FeeTransLog.FeeBatchNo = FeeCalcResult.FeeBatchNo;	
 
---b.Cal DetailCost	
-select
-	TransDetail.GateNo,
-	TransDetail.MerchantNo,
-	GateMerRule.ApplyDate,
-	case when
-		CostRuleByTrans.FeeType = 'Fixed'
-	then
-		CostRuleByTrans.FeeValue
-	else
-		TransDetail.TransAmt * CostRuleByTrans.FeeValue
-	end DetailCost
-into
-	#TransDetailWithCost
-from	
-	#TransDetail TransDetail
-	inner join
-	#GateMerRule GateMerRule
-	on
-		TransDetail.GateNo = GateMerRule.GateNo
-		and
-		TransDetail.MerchantNo = GateMerRule.MerchantNo
-		and
-		TransDetail.FeeEndDate >= GateMerRule.ApplyDate
-		and
-		TransDetail.FeeEndDate < GateMerRule.NextApplyDate
-	inner join
-	Table_CostRuleByTrans CostRuleByTrans
-	on
-		GateMerRule.GateNo = CostRuleByTrans.GateNo
-		and
-		GateMerRule.ApplyDate = CostRuleByTrans.ApplyDate
-where
-	GateMerRule.CostRuleType = 'ByTrans'
-	and
-	(CostRuleByTrans.RefMaxAmt <> @MaxRef
-	or
-	CostRuleByTrans.RefMinAmt <> @MinRef)
-	and
-	(TransDetail.TransAmt >= CostRuleByTrans.RefMinAmt
-	and
-	TransDetail.TransAmt <  CostRuleByTrans.RefMaxAmt);
-
---c.Get DetailGateNoCost
+--b.Cal DetailCost
 With TransLogCost as
+(
+	select
+		TransDetail.GateNo,
+		TransDetail.MerchantNo,
+		TransDetail.FeeEndDate,
+		GateMerRule.ApplyDate,
+		case when
+			CostRuleByTrans.FeeType = 'Fixed'
+		then
+			CostRuleByTrans.FeeValue
+		else
+			TransDetail.TransAmt * CostRuleByTrans.FeeValue
+		end DetailCost
+	from	
+		#TransDetail TransDetail
+		inner join
+		(select distinct
+			GateNo,
+			MerchantNo,
+			ApplyDate,
+			NextApplyDate,
+			CostRuleType
+		from
+			#GateMerRule) GateMerRule
+		on
+			TransDetail.GateNo = GateMerRule.GateNo
+			and
+			TransDetail.MerchantNo = GateMerRule.MerchantNo
+			and
+			TransDetail.FeeEndDate >= GateMerRule.ApplyDate
+			and
+			TransDetail.FeeEndDate < GateMerRule.NextApplyDate
+		inner join
+		Table_CostRuleByTrans CostRuleByTrans
+		on
+			GateMerRule.GateNo = CostRuleByTrans.GateNo
+			and
+			GateMerRule.ApplyDate = CostRuleByTrans.ApplyDate
+	where
+		GateMerRule.CostRuleType = 'ByTrans'
+		and
+		(CostRuleByTrans.RefMaxAmt <> @MaxRef
+		or
+		CostRuleByTrans.RefMinAmt <> @MinRef)
+		and
+		(TransDetail.TransAmt >= CostRuleByTrans.RefMinAmt
+		and
+		TransDetail.TransAmt <  CostRuleByTrans.RefMaxAmt)
+),
+TransLogCostSum as
 (
 	select
 		GateNo,
 		MerchantNo,
+		FeeEndDate,
 		ApplyDate,
 		SUM(DetailCost) as Cost
-	from
-		#TransDetailWithCost
+	from 
+		TransLogCost
 	group by
 		GateNo,
 		MerchantNo,
+		FeeEndDate,
 		ApplyDate
 )
-	
 update 
 	GateMerRule
 set
-	GateMerRule.Cost = TransLogCost.Cost
+	GateMerRule.Cost = TransLogCostSum.Cost
 from
 	#GateMerRule GateMerRule
 	inner join
-	TransLogCost 
+	TransLogCostSum 
 	on
-		GateMerRule.GateNo = TransLogCost.GateNo
+		GateMerRule.GateNo = TransLogCostSum.GateNo
 		and
-		GateMerRule.MerchantNo = TransLogCost.MerchantNo
+		GateMerRule.MerchantNo = TransLogCostSum.MerchantNo
 		and
-		GateMerRule.ApplyDate = TransLogCost.ApplyDate
+		GateMerRule.FeeEndDate = TransLogCostSum.FeeEndDate
+		and
+		GateMerRule.ApplyDate = TransLogCostSum.ApplyDate
 where
 	GateMerRule.CostRuleType = 'ByTrans';
-		
 	
 --4.2 Caculate By Year
 --Not consider RefMinAmt, RefMaxAmt
@@ -328,8 +308,7 @@ where
 	RefMaxAmt = @MaxRef
 	and
 	RefMinAmt = @MinRef;
-	
-	
+
 --4.2.2 Get GateGroup=0 CostRuleByYear
 select
 	GateNo,
@@ -346,30 +325,22 @@ With SingleGateSumAmt as
 (
 	select
 		GateNo,
+		FeeEndDate,
 		ApplyDate,
-		NextApplyDate,
-		SUM(SucceedTransAmount) SucceedTransAmount
+		--NextApplyDate,
+		SucceedTransAmount
 	from
 		#GateMerRule
 	where
 		CostRuleType = 'ByYear'
-	group by
-		GateNo,
-		ApplyDate,
-		NextApplyDate
 ),
 SingleGateSumCost as 
 (
 	select
 		SingleGateSumAmt.GateNo,
+		SingleGateSumAmt.FeeEndDate,
 		SingleGateSumAmt.ApplyDate,
-		case when 
-			SingleGateSumAmt.ApplyDate <= @StartDate
-		then
-			DATEDIFF(DAY, @StartDate, SingleGateSumAmt.NextApplyDate) * ByYearFixedSingleGate.FeePerDay
-		else
-			DATEDIFF(DAY, SingleGateSumAmt.ApplyDate, SingleGateSumAmt.NextApplyDate) * ByYearFixedSingleGate.FeePerDay 
-		end Cost,
+		ByYearFixedSingleGate.FeePerDay as Cost,
 		SingleGateSumAmt.SucceedTransAmount
 	from
 		#ByYearFixedSingleGate ByYearFixedSingleGate
@@ -388,7 +359,7 @@ set
 			then
 				0
 			else
-				(CONVERT(decimal,GateMerRule.SucceedTransAmount)/SingleGateSumCost.SucceedTransAmount)*SingleGateSumCost.Cost
+				SingleGateSumCost.Cost
 			end)
 from
 	#GateMerRule GateMerRule
@@ -397,11 +368,12 @@ from
 	on
 		GateMerRule.GateNo = SingleGateSumCost.GateNo
 		and
+		GateMerRule.FeeEndDate = SingleGateSumCost.FeeEndDate
+		and
 		GateMerRule.ApplyDate = SingleGateSumCost.ApplyDate
 where
 	GateMerRule.CostRuleType = 'ByYear';
-	
-	
+
 --4.2.3 Get GateGroup<>0 CostRuleByYear
 select
 	GateNo,
@@ -419,9 +391,9 @@ With GroupGateSumAmt as
 (
 	select
 		ByYearFixedGroupGate.GateGroup,
+		GateMerRule.FeeEndDate,
 		GateMerRule.ApplyDate,
-		GateMerRule.NextApplyDate,
-		SUM(GateMerRule.SucceedTransAmount) SucceedTransAmount
+		SUM(ISNULL(GateMerRule.SucceedTransAmount,0)) SucceedTransAmount
 	from
 		#GateMerRule GateMerRule
 		inner join
@@ -434,8 +406,8 @@ With GroupGateSumAmt as
 		GateMerRule.CostRuleType = 'ByYear'
 	group by
 		ByYearFixedGroupGate.GateGroup,
-		GateMerRule.ApplyDate,
-		GateMerRule.NextApplyDate
+		GateMerRule.FeeEndDate,
+		GateMerRule.ApplyDate
 ),
 GroupGateFee as
 (
@@ -450,14 +422,9 @@ GroupGateSumCost as
 (
 	select
 		GroupGateSumAmt.GateGroup,
+		GroupGateSumAmt.FeeEndDate,
 		GroupGateSumAmt.ApplyDate,
-		case when 
-			GroupGateSumAmt.ApplyDate <= @StartDate
-		then
-			DATEDIFF(DAY, @StartDate, GroupGateSumAmt.NextApplyDate) * GroupGateFee.FeePerDay
-		else
-			DATEDIFF(DAY, GroupGateSumAmt.ApplyDate, GroupGateSumAmt.NextApplyDate) * GroupGateFee.FeePerDay 
-		end Cost,
+		GroupGateFee.FeePerDay as Cost,
 		GroupGateSumAmt.SucceedTransAmount
 	from
 		GroupGateFee
@@ -492,9 +459,10 @@ from
 		GroupGateSumCost.GateGroup = ByYearFixedGroupGate.GateGroup
 		and
 		GroupGateSumCost.ApplyDate = ByYearFixedGroupGate.ApplyDate
+		and
+		GateMerRule.FeeEndDate = GroupGateSumCost.FeeEndDate
 where
 	GateMerRule.CostRuleType = 'ByYear';
-
 	
 --4.2.4 Calculate By Split
 update 
@@ -593,6 +561,7 @@ where
 select 
 	GateNo,
 	MerchantNo,
+	FeeEndDate,	
 	SUM(ISNULL(SucceedTransCount,0)) TransSumCount,
 	SUM(ISNULL(SucceedTransAmount,0)) TransSumAmount,
 	SUM(ISNULL(Cost ,0)) as Cost
@@ -600,17 +569,18 @@ from
 	#GateMerRule
 group by
 	GateNo,
-	MerchantNo;	
+	MerchantNo,
+	FeeEndDate;	
 
 
 --6. clear temp table 
 drop table #FeeResult;
 drop table #FeeResultWithApplyDate;
 drop table #FeeResultWithAllApplyDate;
-drop table #FeeResultWithRuleType;
+--drop table #FeeResultWithRuleType;
 drop table #GateMerRule;
 drop table #TransDetail;	
-drop table #TransDetailWithCost;
+--drop table #TransDetailWithCost;
 drop table #CostRuleByYearFixed;
 drop table #ByYearFixedSingleGate;
 drop table #ByYearFixedGroupGate;
