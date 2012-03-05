@@ -89,6 +89,7 @@ create table #Curr
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4)
@@ -97,7 +98,7 @@ create table #Curr
 insert into 
 	#Curr 
 exec
-	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate
+	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate;
 
 
 --2.2 Get PreviousData
@@ -105,6 +106,7 @@ create table #Prev
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4)
@@ -113,7 +115,7 @@ create table #Prev
 insert into
 	#Prev
 exec
-	Proc_QuerySubFinancialCostCal @PrevStartDate,@PrevEndDate
+	Proc_QuerySubFinancialCostCal @PrevStartDate,@PrevEndDate;
 
 
 --2.3 Get LastYearData
@@ -121,6 +123,7 @@ create table #LastYear
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4)
@@ -129,9 +132,45 @@ create table #LastYear
 insert into
 	#LastYear
 exec
-	Proc_QuerySubFinancialCostCal @LastYearStartDate,@LastYearEndDate	
+	Proc_QuerySubFinancialCostCal @LastYearStartDate,@LastYearEndDate	;
 		
 --3. Get IndustryName
+with CurrSum as
+(
+	select
+		MerchantNo,
+		SUM(ISNULL(TransSumCount,0)) SumCount,
+		SUM(ISNULL(TransSumAmount,0)) SumAmount,
+		SUM(ISNULL(Cost,0)) Cost
+	from	
+		#Curr 
+	group by
+		MerchantNo
+),
+PrevSum as
+(
+	select
+		MerchantNo,
+		SUM(ISNULL(TransSumCount,0)) SumCount,
+		SUM(ISNULL(TransSumAmount,0)) SumAmount,
+		SUM(ISNULL(Cost,0)) Cost
+	from	
+		#Prev
+	group by
+		MerchantNo	
+),
+LastYearSum as
+(
+	select
+		MerchantNo,
+		SUM(ISNULL(TransSumCount,0)) SumCount,
+		SUM(ISNULL(TransSumAmount,0)) SumAmount,
+		SUM(ISNULL(Cost,0)) Cost
+	from	
+		#LastYear
+	group by
+		MerchantNo
+)
 select
 	SalesDeptConfig.IndustryName,
 	coalesce(Curr.MerchantNo,Prev.MerchantNo,LastYear.MerchantNo) MerchantNo,
@@ -140,18 +179,14 @@ select
 	ISNULL(Prev.Cost,0) PrevCost,
 	ISNULL(LastYear.Cost,0) LastYearCost
 from
-	#Curr Curr
+	CurrSum Curr
 	full outer join 
-	#Prev Prev
+	PrevSum Prev
 	on
-		Curr.GateNo = Prev.GateNo
-		and
 		Curr.MerchantNo = Prev.MerchantNo
 	full outer join
-	#LastYear LastYear
+	LastYearSum LastYear
 	on
-		coalesce(Curr.GateNo,Prev.GateNo) = LastYear.GateNo
-		and
 		coalesce(Curr.MerchantNo,Prev.MerchantNo) = LastYear.MerchantNo
 	left join
 	Table_SalesDeptConfiguration SalesDeptConfig

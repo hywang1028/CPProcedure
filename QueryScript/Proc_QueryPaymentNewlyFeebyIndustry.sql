@@ -37,6 +37,7 @@ create table #GateMerCostResult
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4) not null
@@ -47,13 +48,16 @@ exec Proc_QuerySubFinancialCostCal @StartDate,@EndDate;
 select
 	GateNo,
 	MerchantNo,
-	TransSumCount,
-	CONVERT(decimal,TransSumAmount)/100 TransSumAmount,
-	Cost/100 Cost
+	SUM(ISNULL(TransSumCount,0)) TransSumCount,
+	CONVERT(decimal,SUM(ISNULL(TransSumAmount,0)))/100 TransSumAmount,
+	SUM(ISNULL(Cost,0))/100 Cost
 into
 	#GateMerCost
 from
-	#GateMerCostResult;
+	#GateMerCostResult
+group by 
+	GateNo,
+	MerchantNo;
 
 --1.1.3 Prepare NewlyMerchantFee Data
 create table #PaymentMerFeeNewlyCalc
