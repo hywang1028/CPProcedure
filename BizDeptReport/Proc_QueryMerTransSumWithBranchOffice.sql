@@ -7,7 +7,7 @@ go
 Create Procedure Proc_QueryMerTransSumWithBranchOffice
 	@StartDate datetime = '2012-02-01',
 	@PeriodUnit nChar(3) = N'自定义',
-	@EndDate datetime = '2012-02-31',
+	@EndDate datetime = '2012-02-29',
 	@BranchOfficeName nChar(15) = N'银联商务有限公司四川分公司'
 as 
 begin
