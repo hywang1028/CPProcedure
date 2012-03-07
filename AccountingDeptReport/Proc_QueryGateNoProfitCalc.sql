@@ -87,6 +87,7 @@ create table #Curr
 (
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
 	Cost decimal(15,4) not null
@@ -114,6 +115,20 @@ With FeeCalcResult as
 	group by
 		GateNo,
 		MerchantNo
+),
+CurrSum as
+(
+	select
+		GateNo,
+		MerchantNo,
+		SUM(ISNULL(TransSumCount,0)) TransSumCount,
+		SUM(ISNULL(TransSumAmount,0)) TransSumAmount,
+		SUM(ISNULL(Cost,0)) Cost
+	from	
+		#Curr 
+	group by
+		GateNo,
+		MerchantNo
 )
 select
 	Curr.GateNo,
@@ -126,7 +141,7 @@ select
 into
 	#ResultWithProfit
 from
-	#Curr Curr
+	CurrSum Curr
 	left join
 	FeeCalcResult FeeCalcResult
 	on
