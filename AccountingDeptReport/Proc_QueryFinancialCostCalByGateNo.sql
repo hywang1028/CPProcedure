@@ -1,3 +1,4 @@
+--[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
 if OBJECT_ID(N'Proc_QueryFinancialCostCalByGateNo',N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialCostCalByGateNo;
@@ -95,7 +96,7 @@ create table #Curr
 insert into 
 	#Curr
 exec 
-	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate;
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate;
 	
 create table #Prev
 (
@@ -110,7 +111,7 @@ create table #Prev
 insert into
 	#Prev
 exec
-	Proc_QuerySubFinancialCostCal @PrevStartDate,@PrevEndDate;
+	Proc_CalPaymentCost @PrevStartDate,@PrevEndDate;
 	
 create table #LastYear
 (
@@ -125,7 +126,7 @@ create table #LastYear
 insert into
 	#LastYear
 exec
-	Proc_QuerySubFinancialCostCal @LastYearStartDate,@LastYearEndDate;
+	Proc_CalPaymentCost @LastYearStartDate,@LastYearEndDate;
 	
 
 --4. Get GateNoCostRule

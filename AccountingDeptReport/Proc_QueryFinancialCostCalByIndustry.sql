@@ -1,3 +1,4 @@
+--[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
 if OBJECT_ID(N'Proc_QueryFinancialCostCalByIndustry',N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialCostCalByIndustry;
@@ -96,9 +97,9 @@ create table #Curr
 );
 
 insert into 
-	#Curr 
+	#Curr
 exec
-	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate;
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate;
 
 
 --2.2 Get PreviousData
@@ -115,7 +116,7 @@ create table #Prev
 insert into
 	#Prev
 exec
-	Proc_QuerySubFinancialCostCal @PrevStartDate,@PrevEndDate;
+	Proc_CalPaymentCost @PrevStartDate,@PrevEndDate;
 
 
 --2.3 Get LastYearData
@@ -132,7 +133,7 @@ create table #LastYear
 insert into
 	#LastYear
 exec
-	Proc_QuerySubFinancialCostCal @LastYearStartDate,@LastYearEndDate	;
+	Proc_CalPaymentCost @LastYearStartDate,@LastYearEndDate	;
 		
 --3. Get IndustryName
 with CurrSum as
