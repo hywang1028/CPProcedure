@@ -1,3 +1,4 @@
+--[Created] At 20120308 By 叶博:ORA收入计费规则函数
 if OBJECT_ID(N'Fn_CurrOraFeeCalcExp',N'FN') is not null
 begin
 	drop function Fn_CurrOraFeeCalcExp;

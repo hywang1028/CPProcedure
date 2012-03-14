@@ -1,6 +1,6 @@
+--[Created] At 20120308 By 叶博:每一个有交易的ORA商户一条记录，对应该商户的交易笔数、交易金额、生产库导入的收入、按规则自己计算的收入、当前收入计算规则
 --Input:StartDate,EndDate
 --OutPut:IndustryName,Ora.MerchantNo,TransCount,TransAmount,OriginFeeAmt,ActualFeeAmt,Mer.MerchantName,OraExp.FeeCalcExp
---每一个有交易的ORA商户一条记录，对应该商户的交易笔数、交易金额、生产库导入的收入、按规则自己计算的收入、当前收入计算规则
 --1. Get Ora Actual Fee Amount By Procedure Proc_QueryOraActualFeeCal
 declare @StartDate datetime;
 declare @EndDate datetime;
@@ -23,7 +23,7 @@ create table #OraTransWithActualFee
 insert into
 	#OraTransWithActualFee
 exec
-	Proc_CalORAFee @StartDate,@EndDate;
+	Proc_CalOraFee @StartDate,@EndDate;
 	
 --2. Get IndustryName And MerchantName And FeeCalcExp By Aggregation
 select
@@ -66,7 +66,7 @@ select
 into
 	#OraMerCalcExp
 from
-	DistinctMerNo	
+	DistinctMerNo;
 	
 --4. Get Result
 select
