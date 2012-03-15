@@ -1,3 +1,4 @@
+--[Modified] At 20120312 By 叶博：取数据集单位修改
 if OBJECT_ID(N'Proc_QueryMonthlyTransFeeCostTrend', N'P') is not null
 begin
 	drop procedure Proc_QueryMonthlyTransFeeCostTrend;
@@ -68,7 +69,7 @@ create table #GateMerCostResult
 );
 
 insert into #GateMerCostResult
-exec Proc_QuerySubFinancialCostCal @StartDate,@EndDate;
+exec Proc_CalPaymentCost @StartDate,@EndDate;
 
 select 
 	Period.PeriodStart,
@@ -99,8 +100,8 @@ select
 	GateNo,
 	MerchantNo,
 	TransSumCount,
-	CONVERT(decimal,TransSumAmount)/100 TransSumAmount,
-	Cost/100 Cost
+    TransSumAmount,
+	Cost 
 into
 	#GateMerCost
 from
@@ -228,14 +229,14 @@ select
 	Left(Convert(char(10),Result.PeriodStart,120),7) PeriodStart,
 	Result.MerchantNo,
 	Mer.MerchantName,
-	Convert(decimal,ISNULL(Result.TransSumAmount,0))/100000000 as N'交易金额_亿元',
+	Convert(decimal,ISNULL(Result.TransSumAmount,0))/10000000000 as N'交易金额_亿元',
 	Convert(decimal,ISNULL(Result.TransSumCount,0))/10000 as N'交易笔数_万笔',
 	case when ISNULL(Result.TransSumAmount,0) = 0 then 0 else 10000*ISNULL(Result.FeeAmt,0)/Result.TransSumAmount End as N'扣率_万分之',
-	Convert(decimal,ISNULL(Result.FeeAmt,0))/10000 as N'收入_万元',
+	Convert(decimal,ISNULL(Result.FeeAmt,0))/1000000 as N'收入_万元',
 	case when ISNULL(Result.TransSumAmount,0) = 0 then 0 else 10000*ISNULL(Result.Cost,0)/Result.TransSumAmount End as N'银行成本率_万分之',
-	Convert(decimal,ISNULL(Result.Cost,0))/10000 as N'银行成本_万元',
+	Convert(decimal,ISNULL(Result.Cost,0))/1000000 as N'银行成本_万元',
 	case when ISNULL(Result.TransSumAmount,0) = 0 then 0 else 10000*ISNULL(Result.InstuFeeAmt,0)/Result.TransSumAmount End as N'分润成本率_万分之',
-	Convert(decimal,ISNULL(Result.InstuFeeAmt,0))/10000 as N'分润成本_万元'
+	Convert(decimal,ISNULL(Result.InstuFeeAmt,0))/1000000 as N'分润成本_万元'
 from
 	#IndustryData Result
 	left join

@@ -1,3 +1,4 @@
+--[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
 if OBJECT_ID(N'Proc_QueryGateNoProfitCalc',N'P') is not null
 begin
 	drop procedure Proc_QueryGateNoProfitCalc;
@@ -96,7 +97,7 @@ create table #Curr
 insert into 
 	#Curr
 exec 
-	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate;
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate;
 	
 --4.Calculate The Profit
 With FeeCalcResult as
@@ -134,9 +135,9 @@ select
 	Curr.GateNo,
 	Curr.MerchantNo,
 	Curr.TransSumCount,
-	convert(decimal,Curr.TransSumAmount)/100 TransSumAmount,
+	Curr.TransSumAmount,
 	FeeCalcResult.FeeAmt,
-	Curr.Cost/100 Cost,
+	Curr.Cost,
 	FeeCalcResult.InstuFeeAmt
 into
 	#ResultWithProfit
@@ -157,10 +158,10 @@ select
 	ResultProfit.MerchantNo,
 	MerInfo.MerchantName,
 	ResultProfit.TransSumCount,
-	ResultProfit.TransSumAmount,
-	ResultProfit.FeeAmt,
-	ResultProfit.Cost,
-	ResultProfit.InstuFeeAmt
+	ResultProfit.TransSumAmount/100.0 as TransSumAmount,
+	ResultProfit.FeeAmt/100.0 as FeeAmt,
+	ResultProfit.Cost/100.0 as Cost,
+	ResultProfit.InstuFeeAmt/100.0 as InstuFeeAmt
 from
 	#ResultWithProfit ResultProfit
 	inner join

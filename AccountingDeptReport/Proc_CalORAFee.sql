@@ -1,20 +1,17 @@
-if Object_ID(N'Proc_CalORAFee',N'P') is not null
+--[Created] At 20120308 By 叶博：ORA收入子存储过程
+--Input:StartDate,EndDate
+--Output:MerchantNo,BankSettingID,CPDate,FeeAmt
+if Object_ID(N'Proc_CalOraFee',N'P') is not null
 begin
-	drop procedure Proc_CalORAFee;
+	drop procedure Proc_CalOraFee;
 end
 go
 
-create procedure Proc_CalORAFee
+create procedure Proc_CalOraFee
 	@StartDate datetime = '2011-01-01',
-	@EndDate datetime = '2011-12-31'
+	@EndDate datetime = '2012-01-01'
 as
 begin
-
-declare @CurrStartDate datetime;
-declare @CurrEndDate datetime;
-
-set @CurrStartDate = @StartDate;
-set @CurrEndDate = DATEADD(DAY, 1, @EndDate);
 
 --1. Get Ora Trans 
 select
@@ -30,9 +27,9 @@ into
 from
 	Table_OraTransSum
 where
-	CPDate >= @CurrStartDate
+	CPDate >= @StartDate
 	and
-	CPDate < @CurrEndDate;
+	CPDate < @EndDate;
 	
 
 --2. Calculate FeeAmount By Monthly Trans Count And Fixed FeeValue 
@@ -192,10 +189,7 @@ select
 	MerchantNo,
 	BankSettingID,
 	CPDate,
-	TransCount,
-	TransAmount,
-	FeeAmount,
-	ActualFeeAmt
+	ActualFeeAmt FeeAmt
 from
 	#OraSum;
 

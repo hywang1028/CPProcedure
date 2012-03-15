@@ -1,3 +1,4 @@
+--[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
 if OBJECT_ID(N'Proc_QueryGateGroupProfitCalc',N'P') is not null
 begin
 	drop procedure Proc_QueryGateGroupProfitCalc;
@@ -96,7 +97,7 @@ create table #Curr
 insert into
 	#Curr
 exec 
-	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate;
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate;
 
 
 --4.Get CurrentSum Data And SumFeeAmt&InstuFeeAmt
@@ -141,10 +142,10 @@ select
 	Curr.GateNo,
 	GateRoute.GateDesc,
 	Curr.SumCount,
-	convert(decimal,Curr.SumAmount)/100 SumAmount,
-	FeeResult.FeeAmt,
-	FeeResult.InstuFeeAmt,
-	convert(decimal(15,4),Curr.Cost)/100 Cost
+	Curr.SumAmount/100.0 as SumAmount,
+	FeeResult.FeeAmt/100.0 as FeeAmt,
+	FeeResult.InstuFeeAmt/100.0 as InstuFeeAmt,
+	Curr.Cost/100.0 as Cost
 from
 	CurrSum Curr
 	left join

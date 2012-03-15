@@ -1,3 +1,4 @@
+--[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
 if OBJECT_ID(N'Proc_QueryIndustryProfitCalc',N'P') is not null
 begin
 	drop procedure Proc_QueryIndustryProfitCalc;
@@ -71,7 +72,7 @@ create table #Curr
 insert into 
 	#Curr 
 exec
-	Proc_QuerySubFinancialCostCal @CurrStartDate,@CurrEndDate;
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate;
 	
 
 --3.Fetch SumAmt by All MerchantNo
@@ -109,7 +110,7 @@ CurrSum as
 select
 	Curr.MerchantNo,
 	SUM(Curr.TransSumCount) TransSumCount,
-	SUM(convert(decimal,Curr.TransSumAmount)/100) TransSumAmount,
+	SUM(Curr.TransSumAmount) TransSumAmount,
 	SUM(FeeResult.FeeAmt) FeeAmt,
 	SUM(Curr.Cost) Cost,
 	SUM(FeeResult.InstuFeeAmt) InstuFeeAmt
@@ -132,10 +133,10 @@ select
 	MerWithAmt.MerchantNo,
 	MerInfo.MerchantName,
 	MerWithAmt.TransSumCount,
-	MerWithAmt.TransSumAmount,
-	MerWithAmt.FeeAmt,
-	MerWithAmt.Cost/100 Cost,
-	MerWithAmt.InstuFeeAmt
+	MerWithAmt.TransSumAmount/100.0 as TransSumAmount,
+	MerWithAmt.FeeAmt/100.0 as FeeAmt,
+	MerWithAmt.Cost/100.0 as Cost,
+	MerWithAmt.InstuFeeAmt/100.0 as InstuFeeAmt
 from	
 	#MerWithAllAmt MerWithAmt
 	left join
