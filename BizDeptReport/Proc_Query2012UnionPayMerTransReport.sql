@@ -354,11 +354,11 @@ select
 from
 	#AllMerTransData AllMerTrans
 	full outer join
-	Table_MerInfo PayMer
+	(select * from Table_MerInfo where OpenTime < @CurrEndDate) PayMer
 	on
 		AllMerTrans.MerchantNo = PayMer.MerchantNo
 	full outer join
-	Table_OraMerchants ORAMer
+	(select * from Table_OraMerchants where OpenTime < @CurrEndDate) ORAMer
 	on
 		coalesce(AllMerTrans.MerchantNo,PayMer.MerchantNo) = ORAMer.MerchantNo
 	left join
