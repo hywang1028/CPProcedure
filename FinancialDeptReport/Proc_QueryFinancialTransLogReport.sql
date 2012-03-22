@@ -576,8 +576,8 @@ select
 	(Result.PurchaseCurrencyAmount+Result.PurchaseStockAmount+Result.PurchaseBondAmount) as PurchaseAmount,
 	(Result.RedemptoryCurrencyCount+Result.RedemptoryStockCount+Result.RedemptoryBondCount) as RedemptoryCount,
 	(Result.RedemptoryCurrencyAmount+Result.RedemptoryStockAmount+Result.RedemptoryBondAmount) as RedemptoryAmount,
-	(Result.PurchaseCurrencyCount+Result.PurchaseStockCount+Result.PurchaseBondCount+Result.RedemptoryCurrencyCount+Result.RedemptoryStockCount+Result.RedemptoryBondCount+Result.RetractCount+Result.DividendCount) as TotalCount,
-	(Result.PurchaseCurrencyAmount+Result.PurchaseStockAmount+Result.PurchaseBondAmount+Result.RedemptoryCurrencyAmount+Result.RedemptoryStockAmount+Result.RedemptoryBondAmount+Result.RetractAmount+Result.DividendAmount) as TotalAmount,
+	(Result.PurchaseCurrencyCount+Result.PurchaseStockCount+Result.PurchaseBondCount+Result.RedemptoryCurrencyCount+Result.RedemptoryStockCount+Result.RedemptoryBondCount+Result.RetractCount+Result.DividendCount+Result.ScheduleCount) as TotalCount,
+	(Result.PurchaseCurrencyAmount+Result.PurchaseStockAmount+Result.PurchaseBondAmount+Result.RedemptoryCurrencyAmount+Result.RedemptoryStockAmount+Result.RedemptoryBondAmount+Result.RetractAmount+Result.DividendAmount+Result.ScheduleAmount) as TotalAmount,
 	
 	case when ISNULL(@PurchaseAmount,0) = 0
 		then null
