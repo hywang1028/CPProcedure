@@ -1,6 +1,8 @@
 -- [Created] At 20120306 By 叶博：支付成本子存储过程
 --Input:StartDate,EndDate
 --Output:GateNo,MerchantNo,FeeEndDate,TransCnt,TransAmt,CostAmt
+--[Modified] At 2012-03-21 By Chen.wu  Add @HisRefDate param
+
 if OBJECT_ID(N'Proc_CalPaymentCost',N'P') is not null
 begin
 	drop procedure Proc_CalPaymentCost;
@@ -9,7 +11,8 @@ go
 
 create procedure Proc_CalPaymentCost
 	@StartDate datetime = '2011-07-01',
-	@EndDate datetime = '2011-08-01'
+	@EndDate datetime = '2011-08-01',
+	@HisRefDate datetime = null
 as
 begin
 
@@ -50,88 +53,220 @@ group by
 --3. determin rule type
 
 --3.1 get daily trans with ApplyDate
-select
-	FeeResult.GateNo,
-	FeeResult.MerchantNo,
-	FeeResult.FeeEndDate,
-	max(GateCostRule.ApplyDate) ApplyDate
-into
-	#FeeResultWithApplyDate
-from
-	#FeeResult FeeResult
-	left join
-	Table_GateCostRule GateCostRule
-	on
-		FeeResult.GateNo = GateCostRule.GateNo
-		and
-		FeeResult.FeeEndDate >= GateCostRule.ApplyDate   
-group by
-	FeeResult.GateNo,
-	FeeResult.MerchantNo,
-	FeeResult.FeeEndDate;
-	
---3.2 add NextApplyDate in #DailyTransWithApplyDate
-select
-	FeeResultWithApplyDate.GateNo,
-	FeeResultWithApplyDate.MerchantNo,
-	FeeResultWithApplyDate.FeeEndDate,
-	FeeResultWithApplyDate.ApplyDate,
-	MIN(GateCostRule.ApplyDate) NextApplyDate
-into
-	#FeeResultWithAllApplyDate
-from
-	#FeeResultWithApplyDate FeeResultWithApplyDate
-	left join
-	Table_GateCostRule GateCostRule
-	on
-		FeeResultWithApplyDate.GateNo = GateCostRule.GateNo
-		and
-		FeeResultWithApplyDate.ApplyDate < GateCostRule.ApplyDate
-group by
-	FeeResultWithApplyDate.GateNo,
-	FeeResultWithApplyDate.MerchantNo,
-	FeeResultWithApplyDate.FeeEndDate,
-	FeeResultWithApplyDate.ApplyDate;
+create table #GateMerRule
+(
+	GateNo char(4) not null,
+	MerchantNo char(20) not null,
+	FeeEndDate datetime not null,
+	SucceedTransCount int,
+	SucceedTransAmount decimal(14,2),
+	FeeAmt decimal(14, 2),
+	InstuFeeAmt decimal(14, 2),
+	BankFeeAmt decimal(14, 2),
+	Cost decimal(15, 4),
+	CostRuleType varchar(20),
+	ApplyDate datetime,
+	NextApplyDate datetime
+);
 
---3.3 get TransWithRuleType
-select
-	FeeResult.GateNo,
-	FeeResult.MerchantNo,
-	FeeResult.FeeEndDate,
-	FeeResult.PurCnt as SucceedTransCount,
-	FeeResult.PurAmt as SucceedTransAmount,
-	FeeResult.FeeAmt,
-	FeeResult.InstuFeeAmt,
-	FeeResult.BankFeeAmt,
-	CONVERT(decimal(15,4),0) as Cost,
-	isnull(GateCostRule.CostRuleType, '') as CostRuleType,
-	isnull(FeeResultWithApplyDate.ApplyDate,'1900-01-01') as ApplyDate,
-	case when 
-		FeeResultWithApplyDate.NextApplyDate is null
-		or FeeResultWithApplyDate.NextApplyDate > @EndDate
-	then
-		@EndDate
-	else
-		FeeResultWithApplyDate.NextApplyDate
-	end as NextApplyDate
-into
-	#GateMerRule
-from
-	#FeeResultWithAllApplyDate FeeResultWithApplyDate
-	inner join
-	#FeeResult FeeResult
-	on
-		FeeResultWithApplyDate.GateNo = FeeResult.GateNo
-		and
-		FeeResultWithApplyDate.MerchantNo = FeeResult.MerchantNo
-		and
-		FeeResultWithApplyDate.FeeEndDate = FeeResult.FeeEndDate
-	left join
-	Table_GateCostRule GateCostRule
-	on
-		FeeResultWithApplyDate.GateNo = GateCostRule.GateNo
-		and
-		FeeResultWithApplyDate.ApplyDate = GateCostRule.ApplyDate;		
+
+if @HisRefDate is not null
+begin
+	With OldestValidCostRule as
+	(
+		select
+			GateNo,
+			MIN(ApplyDate) ApplyDate
+		from
+			Table_GateCostRule
+		where
+			ApplyDate < @EndDate
+		group by
+			GateNo
+	),
+	RecentCostRule as
+	(
+		select
+			GateNo,
+			MAX(ApplyDate) ApplyDate
+		from
+			Table_GateCostRule
+		where
+			ApplyDate <= @HisRefDate
+		group by
+			GateNo
+	)
+	select
+		OldestValidCostRule.GateNo,
+		ISNULL(RecentCostRule.ApplyDate, OldestValidCostRule.ApplyDate) ApplyDate
+	into
+		#HisRuleKey
+	from
+		OldestValidCostRule
+		left join
+		RecentCostRule
+		on
+			OldestValidCostRule.GateNo = RecentCostRule.GateNo;
+			
+	
+	With HisRule as
+	(
+		select
+			GateCostRule.GateNo,
+			GateCostRule.ApplyDate,
+			GateCostRule.CostRuleType
+		from
+			#HisRuleKey HisRuleKey
+			inner join
+			Table_GateCostRule GateCostRule
+			on
+				HisRuleKey.GateNo = GateCostRule.GateNo
+				and
+				HisRuleKey.ApplyDate = GateCostRule.ApplyDate
+	)	
+	insert into
+		#GateMerRule
+		(
+			GateNo,
+			MerchantNo,
+			FeeEndDate,
+			SucceedTransCount,
+			SucceedTransAmount,
+			FeeAmt,
+			InstuFeeAmt,
+			BankFeeAmt,
+			Cost,
+			CostRuleType,
+			ApplyDate,
+			NextApplyDate
+		)
+	select
+		FeeResult.GateNo,
+		FeeResult.MerchantNo,
+		FeeResult.FeeEndDate,
+		FeeResult.PurCnt as SucceedTransCount,
+		FeeResult.PurAmt as SucceedTransAmount,
+		FeeResult.FeeAmt,
+		FeeResult.InstuFeeAmt,
+		FeeResult.BankFeeAmt,
+		0 as Cost,
+		isnull(HisRule.CostRuleType, '') as CostRuleType,
+		HisRule.ApplyDate,
+		@EndDate NextApplyDate
+	from
+		#FeeResult FeeResult
+		left join
+		HisRule
+		on
+			FeeResult.GateNo = HisRule.GateNo;
+	
+	--clear specific temp table		
+	drop table #HisRuleKey;					
+end
+else
+begin
+	select
+		FeeResult.GateNo,
+		FeeResult.MerchantNo,
+		FeeResult.FeeEndDate,
+		max(GateCostRule.ApplyDate) ApplyDate
+	into
+		#FeeResultWithApplyDate
+	from
+		#FeeResult FeeResult
+		left join
+		Table_GateCostRule GateCostRule
+		on
+			FeeResult.GateNo = GateCostRule.GateNo
+			and
+			FeeResult.FeeEndDate >= GateCostRule.ApplyDate   
+	group by
+		FeeResult.GateNo,
+		FeeResult.MerchantNo,
+		FeeResult.FeeEndDate;
+		
+	--3.2 add NextApplyDate in #DailyTransWithApplyDate
+	select
+		FeeResultWithApplyDate.GateNo,
+		FeeResultWithApplyDate.MerchantNo,
+		FeeResultWithApplyDate.FeeEndDate,
+		FeeResultWithApplyDate.ApplyDate,
+		MIN(GateCostRule.ApplyDate) NextApplyDate
+	into
+		#FeeResultWithAllApplyDate
+	from
+		#FeeResultWithApplyDate FeeResultWithApplyDate
+		left join
+		Table_GateCostRule GateCostRule
+		on
+			FeeResultWithApplyDate.GateNo = GateCostRule.GateNo
+			and
+			FeeResultWithApplyDate.ApplyDate < GateCostRule.ApplyDate
+	group by
+		FeeResultWithApplyDate.GateNo,
+		FeeResultWithApplyDate.MerchantNo,
+		FeeResultWithApplyDate.FeeEndDate,
+		FeeResultWithApplyDate.ApplyDate;
+
+
+	--3.3 get TransWithRuleType
+	insert into
+		#GateMerRule
+		(
+			GateNo,
+			MerchantNo,
+			FeeEndDate,
+			SucceedTransCount,
+			SucceedTransAmount,
+			FeeAmt,
+			InstuFeeAmt,
+			BankFeeAmt,
+			Cost,
+			CostRuleType,
+			ApplyDate,
+			NextApplyDate
+		)
+	select
+		FeeResult.GateNo,
+		FeeResult.MerchantNo,
+		FeeResult.FeeEndDate,
+		FeeResult.PurCnt as SucceedTransCount,
+		FeeResult.PurAmt as SucceedTransAmount,
+		FeeResult.FeeAmt,
+		FeeResult.InstuFeeAmt,
+		FeeResult.BankFeeAmt,
+		CONVERT(decimal(15,4),0) as Cost,
+		isnull(GateCostRule.CostRuleType, '') as CostRuleType,
+		isnull(FeeResultWithApplyDate.ApplyDate,'1900-01-01') as ApplyDate,
+		case when 
+			FeeResultWithApplyDate.NextApplyDate is null
+			or FeeResultWithApplyDate.NextApplyDate > @EndDate
+		then
+			@EndDate
+		else
+			FeeResultWithApplyDate.NextApplyDate
+		end as NextApplyDate
+	from
+		#FeeResultWithAllApplyDate FeeResultWithApplyDate
+		inner join
+		#FeeResult FeeResult
+		on
+			FeeResultWithApplyDate.GateNo = FeeResult.GateNo
+			and
+			FeeResultWithApplyDate.MerchantNo = FeeResult.MerchantNo
+			and
+			FeeResultWithApplyDate.FeeEndDate = FeeResult.FeeEndDate
+		left join
+		Table_GateCostRule GateCostRule
+		on
+			FeeResultWithApplyDate.GateNo = GateCostRule.GateNo
+			and
+			FeeResultWithApplyDate.ApplyDate = GateCostRule.ApplyDate;
+	
+	--clear specific temp table		
+	drop table #FeeResultWithApplyDate;
+	drop table #FeeResultWithAllApplyDate;
+end		
 	
 --4. calculate cost value
 
@@ -578,8 +713,8 @@ group by
 
 --6. clear temp table 
 drop table #FeeResult;
-drop table #FeeResultWithApplyDate;
-drop table #FeeResultWithAllApplyDate;
+--drop table #FeeResultWithApplyDate;
+--drop table #FeeResultWithAllApplyDate;
 drop table #GateMerRule;
 drop table #TransDetail;	
 drop table #CostRuleByYearFixed;
