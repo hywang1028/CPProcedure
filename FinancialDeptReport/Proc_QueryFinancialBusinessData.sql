@@ -5,8 +5,8 @@ end
 go
 
 create procedure Proc_QueryFinancialBusinessData
-	@StartDate datetime = '2011-08-01',
-	@EndDate datetime = '2011-08-31',
+	@StartDate datetime = '2012-03-01',
+	@EndDate datetime = '2012-03-20',
 	@BizType nvarchar(20) = N'B2C'
 as
 begin
@@ -20,21 +20,46 @@ end
 
 
 --2. Prepare @StartDate&@EndDate
-declare @CurrStartDate datetime;
-declare @CurrEndDate datetime;
-declare @PrevStartDate datetime;
-declare @PrevEndDate datetime;
-declare @LastYearStartDate datetime;
-declare @LastYearEndDate datetime;
-begin
-set @CurrStartDate = @StartDate;
-set @CurrEndDate = DATEADD(DAY,1,@EndDate);
-set @PrevStartDate = DATEADD(MONTH, -1, @CurrStartDate);
-set @PrevEndDate = DATEADD(MONTH, -1, @CurrEndDate);
-set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);
-set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);
-end
-
+declare @CurrStartDate datetime;  
+declare @CurrEndDate datetime;  
+declare @PrevStartDate datetime;  
+declare @PrevEndDate datetime;  
+declare @LastYearStartDate datetime;  
+declare @LastYearEndDate datetime;  
+begin  
+set @CurrStartDate = @StartDate;  
+set @CurrEndDate = DATEADD(DAY,1,@EndDate);  
+  
+if(DAY(@CurrStartDate)=1 or DAY(@CurrEndDate)=1)  
+begin  
+ set @PrevStartDate = case when 
+								MONTH(@CurrStartDate) = MONTH(@CurrEndDate)
+								and
+								YEAR(@CurrStartDate) = YEAR(@CurrEndDate)
+							then
+								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate)+(-1),@CurrStartDate)
+							else	
+								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrStartDate)
+					  end 	  
+ set @PrevEndDate = case when 
+								MONTH(@CurrStartDate) = MONTH(@CurrEndDate)
+								and
+								YEAR(@CurrStartDate) = YEAR(@CurrEndDate)
+							then
+								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate)+(-1),@CurrEndDate)
+							else
+								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrEndDate)
+					end
+end  
+else  
+begin  
+ set @PrevStartDate = DATEADD(DAY, (-1)* DATEDIFF(DAY,@CurrStartDate,@CurrEndDate), @CurrStartDate);  
+ set @PrevEndDate = @CurrStartDate;  
+end  
+ 
+set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);  
+set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);  
+end  
 
 --3.Get Data By BizType&Date
 create table #CurrDaily
