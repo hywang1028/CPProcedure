@@ -1,3 +1,6 @@
+--[Modified] At 20120331 By 叶博：修改环比计算参数的逻辑
+--Input:@StartDate,@EndDate,@BizType
+--Output:BankName,BankChannel,DailyTransCount,CurrTransCount,CurrTransAmount,PrevTransCount,PrevTransAmount,LastYearTransCount,LastYearTransAmount,SumAmt
 if OBJECT_ID(N'Proc_QueryFinancialBusinessData',N'P') is not null
 begin
 	drop Procedure Proc_QueryFinancialBusinessData
@@ -30,26 +33,10 @@ begin
 set @CurrStartDate = @StartDate;  
 set @CurrEndDate = DATEADD(DAY,1,@EndDate);  
   
-if(DAY(@CurrStartDate)=1 or DAY(@CurrEndDate)=1)  
+if(DAY(@CurrStartDate)=1 and DAY(@CurrEndDate)=1)  
 begin  
- set @PrevStartDate = case when 
-								MONTH(@CurrStartDate) = MONTH(@CurrEndDate)
-								and
-								YEAR(@CurrStartDate) = YEAR(@CurrEndDate)
-							then
-								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate)+(-1),@CurrStartDate)
-							else	
-								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrStartDate)
-					  end 	  
- set @PrevEndDate = case when 
-								MONTH(@CurrStartDate) = MONTH(@CurrEndDate)
-								and
-								YEAR(@CurrStartDate) = YEAR(@CurrEndDate)
-							then
-								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate)+(-1),@CurrEndDate)
-							else
-								DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrEndDate)
-					end
+ set @PrevStartDate = DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrStartDate);  
+ set @PrevEndDate = DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrEndDate);
 end  
 else  
 begin  
