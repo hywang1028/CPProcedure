@@ -1,3 +1,6 @@
+--[Modified] At 20120331 By 叶博：修改环比计算参数的逻辑
+--Input:@StartDate,@EndDate,@BizType
+--Output:BankName,BankChannel,DailyTransCount,CurrTransCount,CurrTransAmount,PrevTransCount,PrevTransAmount,LastYearTransCount,LastYearTransAmount,SumAmt
 if OBJECT_ID(N'Proc_QueryFinancialBusinessData',N'P') is not null
 begin
 	drop Procedure Proc_QueryFinancialBusinessData
@@ -5,8 +8,8 @@ end
 go
 
 create procedure Proc_QueryFinancialBusinessData
-	@StartDate datetime = '2011-08-01',
-	@EndDate datetime = '2011-08-31',
+	@StartDate datetime = '2012-03-01',
+	@EndDate datetime = '2012-03-20',
 	@BizType nvarchar(20) = N'B2C'
 as
 begin
@@ -20,21 +23,30 @@ end
 
 
 --2. Prepare @StartDate&@EndDate
-declare @CurrStartDate datetime;
-declare @CurrEndDate datetime;
-declare @PrevStartDate datetime;
-declare @PrevEndDate datetime;
-declare @LastYearStartDate datetime;
-declare @LastYearEndDate datetime;
-begin
-set @CurrStartDate = @StartDate;
-set @CurrEndDate = DATEADD(DAY,1,@EndDate);
-set @PrevStartDate = DATEADD(MONTH, -1, @CurrStartDate);
-set @PrevEndDate = DATEADD(MONTH, -1, @CurrEndDate);
-set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);
-set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);
-end
-
+declare @CurrStartDate datetime;  
+declare @CurrEndDate datetime;  
+declare @PrevStartDate datetime;  
+declare @PrevEndDate datetime;  
+declare @LastYearStartDate datetime;  
+declare @LastYearEndDate datetime;  
+begin  
+set @CurrStartDate = @StartDate;  
+set @CurrEndDate = DATEADD(DAY,1,@EndDate);  
+  
+if(DAY(@CurrStartDate)=1 and DAY(@CurrEndDate)=1)  
+begin  
+ set @PrevStartDate = DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrStartDate);  
+ set @PrevEndDate = DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrEndDate);
+end  
+else  
+begin  
+ set @PrevStartDate = DATEADD(DAY, (-1)* DATEDIFF(DAY,@CurrStartDate,@CurrEndDate), @CurrStartDate);  
+ set @PrevEndDate = @CurrStartDate;  
+end  
+ 
+set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);  
+set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);  
+end  
 
 --3.Get Data By BizType&Date
 create table #CurrDaily
