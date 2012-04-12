@@ -52,7 +52,7 @@ create table #PaymentFeeResult
 (
 	MerchantNo char(20) not null,
 	GateNo char(4) not null,
-	FeeEndDate char(400) not null,
+	FeeEndDate datetime not null,
 	FeeAmt decimal(15,4) not null
 );
 insert into 
