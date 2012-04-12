@@ -36,14 +36,13 @@ set @CurrEndDate = DATEADD(DAY,1,@EndDate);
 if(DAY(@CurrStartDate)=1 and DAY(@CurrEndDate)=1)  
 begin  
  set @PrevStartDate = DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrStartDate);  
- set @PrevEndDate = DATEADD(MONTH,(-1) * DATEDIFF(MONTH,@CurrStartDate,@CurrEndDate),@CurrEndDate);
 end  
 else  
 begin  
  set @PrevStartDate = DATEADD(DAY, (-1)* DATEDIFF(DAY,@CurrStartDate,@CurrEndDate), @CurrStartDate);  
- set @PrevEndDate = @CurrStartDate;  
 end  
  
+set @PrevEndDate = @CurrStartDate;   
 set @LastYearStartDate = DATEADD(YEAR,-1,@CurrStartDate);  
 set @LastYearEndDate = DATEADD(YEAR,-1,@CurrEndDate);  
 end  
