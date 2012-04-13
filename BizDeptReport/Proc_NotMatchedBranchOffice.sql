@@ -102,9 +102,7 @@ from
 where
 	BranchOfficeNameRule.BranchOfficeShortName is null
 	and
-	SalesDeptConfiguration.Channel not in (N'银联',N'银商')
-	and
-	BranchOfficeNameRule.BranchOfficeShortName not in (N'数字王府井',N'好易联');
+	SalesDeptConfiguration.Channel not in (N'银联',N'银商');
 			
 end
 
