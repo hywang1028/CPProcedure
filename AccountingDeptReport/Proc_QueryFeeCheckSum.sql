@@ -6,9 +6,9 @@ end
 go
 
 create procedure Proc_QueryFeeCheckSum
-	@StartDate datetime = '2012-02-01',
-	@EndDate datetime = '2012-03-01',
-	@Type nvarchar(2) = N'ÖÜ'
+	@StartDate datetime = '2012-03-01',
+	@EndDate datetime = '2012-04-30',
+	@Type nvarchar(2) = N'ÔÂ'
 as 
 begin
 
@@ -46,24 +46,100 @@ where
 	PeriodUnit = 'Week';
 	
 --2.2 Get Week FeeSum Data From CP Table_FeeCalcResult 
-select
-	SUM(ISNULL(FeeResult.PurAmt,0))/100.0 as PurAmt,
-	SUM(ISNULL(FeeResult.PurCnt,0)) PurCnt,
-	SUM(ISNULL(FeeResult.FeeAmt,0))/100.0 as FeeAmt,
-	SUM(ISNULL(FeeResult.InstuFeeAmt,0))/100.0 as InstuFeeAmt,
-	FeeCheckSumWeek.CheckEndDate
-into
-	#FeeResultWeek
-from
-	Table_FeeCalcResult FeeResult
-	inner join
-	#FeeCheckSumWeek FeeCheckSumWeek
-	on
-		FeeResult.FeeEndDate >= DATEADD(WEEK,-1,FeeCheckSumWeek.CheckEndDate)
+--select
+--	SUM(ISNULL(FeeResult.PurAmt,0))/100.0 as PurAmt,
+--	SUM(ISNULL(FeeResult.PurCnt,0)) PurCnt,
+--	SUM(ISNULL(FeeResult.FeeAmt,0))/100.0 as FeeAmt,
+--	SUM(ISNULL(FeeResult.InstuFeeAmt,0))/100.0 as InstuFeeAmt,
+--	FeeCheckSumWeek.CheckEndDate
+--into
+--	#FeeResultWeek
+--from
+--	Table_FeeCalcResult FeeResult
+--	inner join
+--	#FeeCheckSumWeek FeeCheckSumWeek
+--	on
+--		FeeResult.FeeEndDate >= DATEADD(WEEK,-1,FeeCheckSumWeek.CheckEndDate)
+--		and
+--		FeeResult.FeeEndDate < FeeCheckSumWeek.CheckEndDate
+--group by
+--	FeeCheckSumWeek.CheckEndDate;
+
+create table #FeeResultWeek
+(
+	PurAmt decimal(14,2) not null,
+	PurCnt int not null,
+	FeeAmt decimal(12,2) not null,
+	InstuFeeAmt decimal(12,2) not null,
+	CheckEndDate datetime not null
+)
+
+declare @WeekMinDate datetime;
+set @WeekMinDate = (
+					select
+						MIN(CheckEndDate) 
+					from
+						Table_FeeCheckSum
+					where
+						CheckEndDate >= @StartDate
+						and
+						CheckEndDate < @EndDate
+						and
+						PeriodUnit = 'Week'
+				   );
+
+while(DATEADD(WEEK,-1,@WeekMinDate) >= @StartDate)
+begin
+	set @WeekMinDate = DATEADD(WEEK,-1,@WeekMinDate);
+
+	insert into 
+		#FeeResultWeek
+	select
+		SUM(ISNULL(PurAmt,0))/100.0 as PurAmt,
+		SUM(ISNULL(PurCnt,0)) PurCnt,
+		SUM(ISNULL(FeeAmt,0))/100.0 as FeeAmt,
+		SUM(ISNULL(InstuFeeAmt,0))/100.0 as InstuFeeAmt,
+		@WeekMinDate as CheckEndDate
+	from
+		Table_FeeCalcResult 
+	where
+		FeeEndDate >= DATEADD(WEEK,-1,@WeekMinDate) 
 		and
-		FeeResult.FeeEndDate < FeeCheckSumWeek.CheckEndDate
-group by
-	FeeCheckSumWeek.CheckEndDate;
+		FeeEndDate < @WeekMinDate;
+end
+
+set @WeekMinDate = (
+					select
+						MIN(CheckEndDate) 
+					from
+						Table_FeeCheckSum
+					where
+						CheckEndDate >= @StartDate
+						and
+						CheckEndDate < @EndDate
+						and
+						PeriodUnit = 'Week'
+				   );
+
+while(@WeekMinDate < @EndDate)
+begin
+	insert into 
+		#FeeResultWeek
+	select
+		SUM(ISNULL(PurAmt,0))/100.0 as PurAmt,
+		SUM(ISNULL(PurCnt,0)) PurCnt,
+		SUM(ISNULL(FeeAmt,0))/100.0 as FeeAmt,
+		SUM(ISNULL(InstuFeeAmt,0))/100.0 as InstuFeeAmt,
+		@WeekMinDate as CheckEndDate
+	from
+		Table_FeeCalcResult 
+	where
+		FeeEndDate >= DATEADD(WEEK,-1,@WeekMinDate) 
+		and
+		FeeEndDate < @WeekMinDate;	
+		
+	set @WeekMinDate = DATEADD(WEEK,1,@WeekMinDate);		
+end
 	
 --2.3 1005 1027 Week Check
 select
@@ -123,13 +199,13 @@ group by
 
 --2.5 Get Comparison Result
 select
-	FeeCheckSumWeek.CheckEndDate,
+	coalesce(FeeResultWeek.CheckEndDate,FeeCheckSumWeek.CheckEndDate),
 	FeeCheckSumWeek.PeriodUnit,
 	
-	FeeCheckSumWeek.PurAmt CPurAmt,
-	FeeCheckSumWeek.PurCnt CPurCnt,
-	FeeCheckSumWeek.FeeAmt CFeeAmt,
-	FeeCheckSumWeek.InstuFeeAmt CInstuFeeAmt,
+	ISNULL(FeeCheckSumWeek.PurAmt,0) as CPurAmt,
+	ISNULL(FeeCheckSumWeek.PurCnt,0) as CPurCnt,
+	ISNULL(FeeCheckSumWeek.FeeAmt,0) as CFeeAmt,
+	ISNULL(FeeCheckSumWeek.InstuFeeAmt,0) as CInstuFeeAmt,
 	FeeCheckSumWeek.TransSumAmt CTransSumAmt,
 	FeeCheckSumWeek.TransSumCnt CTransSumCnt,
 	
@@ -177,16 +253,16 @@ select
 		'NotMatch'
 	end as ResultAndLogCompare		
 from
-	#FeeCheckSumWeek FeeCheckSumWeek
-	inner join
 	#FeeResultWeek FeeResultWeek
+	full join
+	#FeeCheckSumWeek FeeCheckSumWeek
 	on
 		FeeCheckSumWeek.CheckEndDate = FeeResultWeek.CheckEndDate
-	inner join
+	full join
 	#TransLogWeek TransLogWeek
 	on
 		FeeCheckSumWeek.CheckEndDate = TransLogWeek.CheckEndDate
-	left join
+	full join
 	#FeeResultWeekDetailCheck DetailCheck
 	on
 		FeeCheckSumWeek.CheckEndDate = DetailCheck.CheckEndDate;
@@ -226,24 +302,100 @@ where
 	PeriodUnit = 'Month';
 	
 --3.2 Get Month FeeSum Data From CP Table_FeeCalcResult 
-select
-	SUM(ISNULL(FeeResult.PurAmt,0))/100.0 as PurAmt,
-	SUM(ISNULL(FeeResult.PurCnt,0)) PurCnt,
-	SUM(ISNULL(FeeResult.FeeAmt,0))/100.0 as FeeAmt,
-	SUM(ISNULL(FeeResult.InstuFeeAmt,0))/100.0 as InstuFeeAmt,
-	FeeCheckSumMonth.CheckEndDate
-into
-	#FeeResultMonth
-from
-	Table_FeeCalcResult FeeResult
-	inner join
-	#FeeCheckSumMonth FeeCheckSumMonth
-	on
-		FeeResult.FeeEndDate >= DATEADD(MONTH,-1,FeeCheckSumMonth.CheckEndDate)
+--select
+--	SUM(ISNULL(FeeResult.PurAmt,0))/100.0 as PurAmt,
+--	SUM(ISNULL(FeeResult.PurCnt,0)) PurCnt,
+--	SUM(ISNULL(FeeResult.FeeAmt,0))/100.0 as FeeAmt,
+--	SUM(ISNULL(FeeResult.InstuFeeAmt,0))/100.0 as InstuFeeAmt,
+--	FeeCheckSumMonth.CheckEndDate
+--into
+--	#FeeResultMonth
+--from
+--	Table_FeeCalcResult FeeResult
+--	inner join
+--	#FeeCheckSumMonth FeeCheckSumMonth
+--	on
+--		FeeResult.FeeEndDate >= DATEADD(MONTH,-1,FeeCheckSumMonth.CheckEndDate)
+--		and
+--		FeeResult.FeeEndDate < FeeCheckSumMonth.CheckEndDate
+--group by
+--	FeeCheckSumMonth.CheckEndDate;
+
+create table #FeeResultMonth
+(
+	PurAmt decimal(14,2) not null,
+	PurCnt int not null,
+	FeeAmt decimal(12,2) not null,
+	InstuFeeAmt decimal(12,2) not null,
+	CheckEndDate datetime not null
+)
+
+declare @MonthMinDate datetime;
+set @MonthMinDate = (
+					select
+						MIN(CheckEndDate) 
+					from
+						Table_FeeCheckSum
+					where
+						CheckEndDate >= @StartDate
+						and
+						CheckEndDate < @EndDate
+						and
+						PeriodUnit = 'Month'
+				   );
+
+while(DATEADD(MONTH,-1,@MonthMinDate) >= @StartDate)
+begin
+	set @MonthMinDate = DATEADD(MONTH,-1,@MonthMinDate);
+
+	insert into 
+		#FeeResultMonth
+	select
+		SUM(ISNULL(PurAmt,0))/100.0 as PurAmt,
+		SUM(ISNULL(PurCnt,0)) PurCnt,
+		SUM(ISNULL(FeeAmt,0))/100.0 as FeeAmt,
+		SUM(ISNULL(InstuFeeAmt,0))/100.0 as InstuFeeAmt,
+		@MonthMinDate as CheckEndDate
+	from
+		Table_FeeCalcResult 
+	where
+		FeeEndDate >= DATEADD(MONTH,-1,@MonthMinDate) 
 		and
-		FeeResult.FeeEndDate < FeeCheckSumMonth.CheckEndDate
-group by
-	FeeCheckSumMonth.CheckEndDate;
+		FeeEndDate < @MonthMinDate;
+end
+
+set @MonthMinDate = (
+					select
+						MIN(CheckEndDate) 
+					from
+						Table_FeeCheckSum
+					where
+						CheckEndDate >= @StartDate
+						and
+						CheckEndDate < @EndDate
+						and
+						PeriodUnit = 'Month'
+				   );
+
+while(@MonthMinDate < @EndDate)
+begin
+	insert into 
+		#FeeResultMonth
+	select
+		SUM(ISNULL(PurAmt,0))/100.0 as PurAmt,
+		SUM(ISNULL(PurCnt,0)) PurCnt,
+		SUM(ISNULL(FeeAmt,0))/100.0 as FeeAmt,
+		SUM(ISNULL(InstuFeeAmt,0))/100.0 as InstuFeeAmt,
+		@MonthMinDate as CheckEndDate
+	from
+		Table_FeeCalcResult 
+	where
+		FeeEndDate >= DATEADD(MONTH,-1,@MonthMinDate) 
+		and
+		FeeEndDate < @MonthMinDate;	
+		
+	set @MonthMinDate = DATEADD(MONTH,1,@MonthMinDate);		
+end
 	
 --3.3 1005 1027 Month Check
 select
@@ -303,7 +455,7 @@ group by
 
 --3.5 Get Comparison Result
 select
-	FeeCheckSumMonth.CheckEndDate,
+	coalesce(FeeResultMonth.CheckEndDate,FeeResultMonth.CheckEndDate),
 	FeeCheckSumMonth.PeriodUnit,
 
 	FeeCheckSumMonth.PurAmt CPurAmt,
@@ -357,16 +509,16 @@ select
 		'NotMatch'
 	end as ResultAndLogCompare		
 from
-	#FeeCheckSumMonth FeeCheckSumMonth
-	inner join
 	#FeeResultMonth FeeResultMonth
+	full join
+	#FeeCheckSumMonth FeeCheckSumMonth
 	on
 		FeeCheckSumMonth.CheckEndDate = FeeResultMonth.CheckEndDate
-	inner join
+	full join
 	#TransLogMonth TransLogMonth 
 	on
 		FeeCheckSumMonth.CheckEndDate = TransLogMonth.CheckEndDate
-	left join
+	full join
 	#FeeResultMonthDetailCheck DetailCheck
 	on
 		FeeCheckSumMonth.CheckEndDate = DetailCheck.CheckEndDate;
