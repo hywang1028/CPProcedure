@@ -348,6 +348,7 @@ With SalesManagerTransData as
 )
 select
 	ISNULL(KPIData.BizUnit,N'其他') BizUnit,
+	case when KPIData.BizUnit <> N'其他' then 0 else 1 End as OrderID,
 	coalesce(KPIData.EmpName,Sales.SalesManager) SalesManager,
 	ISNULL(KPIData.KPIValue,0)/100 KPIValue,
 	case when ISNULL(KPIData.KPIValue,0) = 0 

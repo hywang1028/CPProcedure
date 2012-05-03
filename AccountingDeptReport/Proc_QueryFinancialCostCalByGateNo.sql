@@ -1,4 +1,5 @@
 --[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
+--[Modified] At 20120503 By 王红燕:修改网关成本规则显示方法
 if OBJECT_ID(N'Proc_QueryFinancialCostCalByGateNo',N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialCostCalByGateNo;
@@ -130,18 +131,18 @@ exec
 	
 
 --4. Get GateNoCostRule
-create table #GateNoCostRule
-(
-	GateNo char(4) not null,
-	GateName nvarchar(80) not null,
-	ApplyDate char(20),
-	CostCalculateRule nChar(100)
-);	
+--create table #GateNoCostRule
+--(
+--	GateNo char(4) not null,
+--	GateName nvarchar(80) not null,
+--	ApplyDate char(20),
+--	CostCalculateRule nChar(100)
+--);	
 
-insert into
-	#GateNoCostRule
-exec
-	Proc_QueryGateNoCostRule;
+--insert into
+--	#GateNoCostRule
+--exec
+--	Proc_QueryGateNoCostRule;
 	
 --5.Get TransSumCount&TransSumAmount
 with CurrSum as
@@ -212,19 +213,19 @@ select
 		GateCate.GateCategory1
 	end GateCategory1,	
 	Result.GateNo,
-	GateNoCostRule.GateName,
+	GateRoute.GateDesc,
 	Result.SumCount,
 	Result.SumAmount,
 	Result.CurrCost,
 	Result.PrevCost,
 	Result.LastYearCost,
-	GateNoCostRule.CostCalculateRule
+	dbo.Fn_CurrPaymentCostCalcExp(Result.GateNo) as CostCalculateRule
 from
 	#Result Result
 	left join
-	#GateNoCostRule GateNoCostRule
+	Table_GateRoute GateRoute
 	on
-		Result.GateNo = GateNoCostRule.GateNo
+		Result.GateNo = GateRoute.GateNo
 	left join
 	Table_GateCategory GateCate
 	on
@@ -234,6 +235,6 @@ from
 drop table #Curr;
 drop table #Prev;
 drop table #LastYear;
-drop table #GateNoCostRule;
+--drop table #GateNoCostRule;
 
 end
