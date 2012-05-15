@@ -7,6 +7,7 @@ go
 create procedure Proc_QueryKeyMerchantTransSumReport
 	@StartDate datetime = '2011-09-01',
 	@PeriodUnit nchar(4) = N'月',
+	@EndDate datetime = '2011-10-01',
 	@MeasureCategory nchar(10) = N'成功金额'
 as
 begin
@@ -20,6 +21,11 @@ end
 if (@StartDate is null)
 begin
 	raiserror('@StartDate cannot be empty.', 16, 1);
+end
+
+if (@PeriodUnit = N'自定义' and @EndDate is null)
+begin
+	raiserror('@EndDate cannot be empty.', 16, 1);
 end
 
 if (ISNULL(@MeasureCategory, N'') = N'')
@@ -79,6 +85,15 @@ begin
 	set @PrevEndDate = @CurrStartDate;
 	set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate);	
 	set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
+end
+else if(@PeriodUnit = N'自定义')
+begin
+	set @CurrStartDate = @StartDate;
+    set @CurrEndDate = DateAdd(day,1,@EndDate);
+    set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
+    set @PrevEndDate = @CurrStartDate;
+    set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
+    set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 end
 
 --1. Get this period trade count/amount
