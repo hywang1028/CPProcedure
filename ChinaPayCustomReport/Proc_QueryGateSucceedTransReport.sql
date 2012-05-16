@@ -7,6 +7,7 @@ go
 create procedure Proc_QueryGateSucceedTransReport
 	@StartDate datetime = '2011-09-01',
 	@PeriodUnit nchar(4) = N'年',
+	@EndDate datetime = '2011-10-01',
 	@MeasureCategory nchar(10) = N'成功金额'
 as
 begin
@@ -19,6 +20,11 @@ end
 if (@StartDate is null)
 begin
 	raiserror('@StartDate cannot be empty.', 16, 1);
+end
+
+if (@PeriodUnit = N'自定义' and @EndDate is null)
+begin
+	raiserror('@EndDate cannot be empty.', 16, 1);
 end
 
 if (ISNULL(@MeasureCategory, N'') = N'')
@@ -79,6 +85,15 @@ begin
 	set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate);	
 	set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 end
+else if(@PeriodUnit = N'自定义')
+begin
+	set @CurrStartDate = @StartDate;
+    set @CurrEndDate = DateAdd(day,1,@EndDate);
+    set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
+    set @PrevEndDate = @CurrStartDate;
+    set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
+    set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
+end
 
 --1. Get this period trade count/amount
 select
@@ -87,7 +102,7 @@ select
 	sum(SucceedTransCount) SumSucceedCount,
 	sum(SucceedTransAmount) SumSucceedAmount
 into
-	#CurrTrans
+	#CurrPayTrans
 from
 	FactDailyTrans
 where
@@ -98,6 +113,23 @@ group by
 	GateNo,
 	MerchantNo;
 
+select
+	BankSettingID as GateNo,
+	MerchantNo,
+	sum(TransCount) SumSucceedCount,
+	sum(TransAmount) SumSucceedAmount
+into
+	#CurrOraTrans
+from
+	Table_OraTransSum
+where
+	CPDate >= @CurrStartDate
+	and
+	CPDate < @CurrEndDate
+group by
+	BankSettingID,
+	MerchantNo;
+	
 --2. Get previous period trade count/amount
 select
 	GateNo,
@@ -105,7 +137,7 @@ select
 	sum(SucceedTransCount) SumSucceedCount,
 	sum(SucceedTransAmount) SumSucceedAmount
 into
-	#PrevTrans
+	#PrevPayTrans
 from
 	FactDailyTrans
 where
@@ -116,6 +148,22 @@ group by
 	GateNo,
 	MerchantNo;
 
+select
+	BankSettingID as GateNo,
+	MerchantNo,
+	sum(TransCount) SumSucceedCount,
+	sum(TransAmount) SumSucceedAmount
+into
+	#PrevOraTrans
+from
+	Table_OraTransSum
+where
+	CPDate >= @PrevStartDate
+	and
+	CPDate < @PrevEndDate
+group by
+	BankSettingID,
+	MerchantNo;
 --3. Get last year same period trade count/amount
 select
 	GateNo,
@@ -123,7 +171,7 @@ select
 	sum(SucceedTransCount) SumSucceedCount,
 	sum(SucceedTransAmount) SumSucceedAmount
 into
-	#LastYearTrans
+	#LastYearPayTrans
 from
 	FactDailyTrans
 where
@@ -134,22 +182,39 @@ group by
 	GateNo,
 	MerchantNo;
 
+select
+	BankSettingID as GateNo,
+	MerchantNo,
+	sum(TransCount) SumSucceedCount,
+	sum(TransAmount) SumSucceedAmount
+into
+	#LastYearOraTrans
+from
+	Table_OraTransSum
+where
+	CPDate >= @LastYearStartDate
+	and
+	CPDate < @LastYearEndDate
+group by
+	BankSettingID,
+	MerchantNo;
 --4. Get all together
 --4.1 Get Sum Value
-
 if @MeasureCategory = N'成功金额'
 begin
 	create table #SumValue
 	(
-	GateNo char(4) not null,
-	MerchantNo nchar(20) not null,
-	CurrSumValue Decimal(12,3) not null,
-	PrevSumValue Decimal(12,3) not null,
-	LastYearSumValue Decimal(12,3) not null
+		TypeName char(4) not null,
+		GateNo char(10) not null,
+		MerchantNo nchar(20) not null,
+		CurrSumValue Decimal(15,4) not null,
+		PrevSumValue Decimal(15,4) not null,
+		LastYearSumValue Decimal(15,4) not null
 	);
 
 	insert into #SumValue
 	(
+		TypeName,
 		GateNo,
 		MerchantNo,
 		CurrSumValue,
@@ -157,45 +222,94 @@ begin
 		LastYearSumValue
 	)
 	select
+		N'Pay' as TypeName,
 		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,
 		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,
-		(Convert(Decimal,isnull(CurrTrans.SumSucceedAmount, 0))/1000000) CurrSumValue,
-		(Convert(Decimal,isnull(PrevTrans.SumSucceedAmount, 0))/1000000) PrevSumValue,
+		(Convert(Decimal,ISNULL(CurrTrans.SumSucceedAmount, 0))/1000000) CurrSumValue,
+		(Convert(Decimal,ISNULL(PrevTrans.SumSucceedAmount, 0))/1000000) PrevSumValue,
 		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedAmount, 0))/1000000) LastYearSumValue
 	from
-		#CurrTrans CurrTrans
+		#CurrPayTrans CurrTrans
 		full outer join
-		#PrevTrans PrevTrans
+		#PrevPayTrans PrevTrans
 		on
 			CurrTrans.GateNo = PrevTrans.GateNo
 			and
 			CurrTrans.MerchantNo = PrevTrans.MerchantNo
 		full outer join
-		#LastYearTrans LastYearTrans
+		#LastYearPayTrans LastYearTrans
+		on
+			coalesce(CurrTrans.GateNo, PrevTrans.GateNo) = LastYearTrans.GateNo
+			and
+			coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo) = LastYearTrans.MerchantNo
+	union all
+	select
+		N'Ora' as TypeName,
+		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,
+		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,
+		(Convert(Decimal,ISNULL(CurrTrans.SumSucceedAmount, 0))/1000000) CurrSumValue,
+		(Convert(Decimal,ISNULL(PrevTrans.SumSucceedAmount, 0))/1000000) PrevSumValue,
+		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedAmount, 0))/1000000) LastYearSumValue
+	from
+		#CurrOraTrans CurrTrans
+		full outer join
+		#PrevOraTrans PrevTrans
+		on
+			CurrTrans.GateNo = PrevTrans.GateNo
+			and
+			CurrTrans.MerchantNo = PrevTrans.MerchantNo
+		full outer join
+		#LastYearOraTrans LastYearTrans
 		on
 			coalesce(CurrTrans.GateNo, PrevTrans.GateNo) = LastYearTrans.GateNo
 			and
 			coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo) = LastYearTrans.MerchantNo;
 
-select
-	DimMerchant.MerchantGroup,
-	DimMerchant.MerchantName,
-	DimMerchant.MerchantNo,
-	DimGate.BankName,
-	DimGate.GateNo,
-	SumValue.CurrSumValue,
-	SumValue.PrevSumValue,
-	SumValue.LastYearSumValue
-from
-	#SumValue SumValue
-	inner join
-	DimGate
-	on
-		SumValue.GateNo = DimGate.GateNo
-	inner join
-	DimMerchant
-	on
-		SumValue.MerchantNo = DimMerchant.MerchantNo;
+	select
+		Mer.MerchantName,
+		SumValue.MerchantNo,
+		ISNULL(case when Gate.GateCategory1 = '#N/A' then NULL else Gate.GateCategory1 End,N'其他') GateCategory,
+		SumValue.GateNo,
+		SumValue.CurrSumValue,
+		SumValue.PrevSumValue,
+		SumValue.LastYearSumValue
+	from
+		#SumValue SumValue
+		left join
+		Table_GateCategory Gate
+		on
+			SumValue.GateNo = Gate.GateNo
+		left join
+		Table_MerInfo Mer
+		on
+			SumValue.MerchantNo = Mer.MerchantNo
+	where
+		TypeName = N'Pay'
+	union all
+	select
+		Mer.MerchantName,
+		SumValue.MerchantNo,
+		N'代付' as GateCategory,
+		Gate.BankName,
+		ISNULL(SUM(SumValue.CurrSumValue),0) CurrSumValue,
+		ISNULL(SUM(SumValue.PrevSumValue),0) PrevSumValue,
+		ISNULL(SUM(SumValue.LastYearSumValue),0) LastYearSumValue
+	from
+		#SumValue SumValue
+		left join
+		Table_OraBankSetting Gate
+		on
+			SumValue.GateNo = Gate.BankSettingID
+		left join
+		Table_OraMerchants Mer
+		on
+			SumValue.MerchantNo = Mer.MerchantNo
+	where
+		TypeName = N'Ora'
+	group by
+		Mer.MerchantName,
+		SumValue.MerchantNo,
+		Gate.BankName;
 
 	drop table #SumValue;
 end
@@ -203,14 +317,16 @@ else
 begin
 	create table #SumCount
 	(
-	GateNo char(4) not null,
-	MerchantNo nchar(20) not null,
-	CurrSumValue Decimal(12,3) not null,
-	PrevSumValue Decimal(12,3) not null,
-	LastYearSumValue Decimal(12,3) not null
+		TypeName char(4) not null,
+		GateNo char(10) not null,
+		MerchantNo nchar(20) not null,
+		CurrSumValue Decimal(15,4) not null,
+		PrevSumValue Decimal(15,4) not null,
+		LastYearSumValue Decimal(15,4) not null
 	);
 	insert into #SumCount
 	(
+		TypeName,
 		GateNo,
 		MerchantNo,
 		CurrSumValue,
@@ -218,44 +334,93 @@ begin
 		LastYearSumValue
 	)
 	select
+		N'Pay' as TypeName,
 		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,
 		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,
-		(Convert(Decimal,isnull(CurrTrans.SumSucceedCount, 0))/1000) CurrSumValue,
-		(Convert(Decimal,isnull(PrevTrans.SumSucceedCount, 0))/1000) PrevSumValue,
-		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedCount, 0))/1000) LastYearSumValue
+		(Convert(Decimal,isnull(CurrTrans.SumSucceedCount, 0))/10000) CurrSumValue,
+		(Convert(Decimal,isnull(PrevTrans.SumSucceedCount, 0))/10000) PrevSumValue,
+		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedCount, 0))/10000) LastYearSumValue
 	from
-		#CurrTrans CurrTrans
+		#CurrPayTrans CurrTrans
 		full outer join
-		#PrevTrans PrevTrans
+		#PrevPayTrans PrevTrans
 		on
 			CurrTrans.GateNo = PrevTrans.GateNo
 			and
 			CurrTrans.MerchantNo = PrevTrans.MerchantNo
 		full outer join
-		#LastYearTrans LastYearTrans
+		#LastYearPayTrans LastYearTrans
+		on
+			coalesce(CurrTrans.GateNo, PrevTrans.GateNo) = LastYearTrans.GateNo
+			and
+			coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo) = LastYearTrans.MerchantNo
+	union all
+	select
+		N'Ora' as TypeName,
+		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,
+		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,
+		(Convert(Decimal,ISNULL(CurrTrans.SumSucceedCount, 0))/10000) CurrSumValue,
+		(Convert(Decimal,ISNULL(PrevTrans.SumSucceedCount, 0))/10000) PrevSumValue,
+		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedCount, 0))/10000) LastYearSumValue
+	from
+		#CurrOraTrans CurrTrans
+		full outer join
+		#PrevOraTrans PrevTrans
+		on
+			CurrTrans.GateNo = PrevTrans.GateNo
+			and
+			CurrTrans.MerchantNo = PrevTrans.MerchantNo
+		full outer join
+		#LastYearOraTrans LastYearTrans
 		on
 			coalesce(CurrTrans.GateNo, PrevTrans.GateNo) = LastYearTrans.GateNo
 			and
 			coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo) = LastYearTrans.MerchantNo;
-select
-	DimMerchant.MerchantGroup,
-	DimMerchant.MerchantName,
-	DimMerchant.MerchantNo,
-	DimGate.BankName,
-	DimGate.GateNo,
-	SumCount.CurrSumValue,
-	SumCount.PrevSumValue,
-	SumCount.LastYearSumValue
-from
-	#SumCount SumCount
-	inner join
-	DimGate
-	on
-		SumCount.GateNo = DimGate.GateNo
-	inner join
-	DimMerchant
-	on
-		SumCount.MerchantNo = DimMerchant.MerchantNo;
+	select
+		Mer.MerchantName,
+		SumCount.MerchantNo,
+		ISNULL(case when Gate.GateCategory1 = '#N/A' then NULL else Gate.GateCategory1 End,N'其他') GateCategory,
+		SumCount.GateNo,
+		SumCount.CurrSumValue,
+		SumCount.PrevSumValue,
+		SumCount.LastYearSumValue
+	from
+		#SumCount SumCount
+		left join
+		Table_GateCategory Gate
+		on
+			SumCount.GateNo = Gate.GateNo
+		left join
+		Table_MerInfo Mer
+		on
+			SumCount.MerchantNo = Mer.MerchantNo
+	where
+		TypeName = N'Pay'
+	union all
+	select
+		Mer.MerchantName,
+		SumCount.MerchantNo,
+		N'代付' as GateCategory,
+		Gate.BankName,
+		ISNULL(SUM(SumCount.CurrSumValue),0) CurrSumValue,
+		ISNULL(SUM(SumCount.PrevSumValue),0) PrevSumValue,
+		ISNULL(SUM(SumCount.LastYearSumValue),0) LastYearSumValue
+	from
+		#SumCount SumCount
+		left join
+		Table_OraBankSetting Gate
+		on
+			SumCount.GateNo = Gate.BankSettingID
+		left join
+		Table_OraMerchants Mer
+		on
+			SumCount.MerchantNo = Mer.MerchantNo
+	where
+		TypeName = N'Ora'
+	group by
+		Mer.MerchantName,
+		SumCount.MerchantNo,
+		Gate.BankName;
 
 	drop table #SumCount;
 end
@@ -264,9 +429,11 @@ end
 
 		
 --5 Clear all temp tables
-
-drop table #LastYearTrans;
-drop table #PrevTrans;
-drop table #CurrTrans;
+drop table #LastYearPayTrans;
+drop table #PrevPayTrans;
+drop table #CurrPayTrans;
+drop table #LastYearOraTrans;
+drop table #PrevOraTrans;
+drop table #CurrOraTrans;
 
 End
