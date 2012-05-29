@@ -1,4 +1,5 @@
 --[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
+--[Modified] At 20120528 By 王红燕:配合调用的子存储过程做相应修改
 if OBJECT_ID(N'Proc_QueryGateNoProfitCalc',N'P') is not null
 begin
 	drop procedure Proc_QueryGateNoProfitCalc;
@@ -91,95 +92,59 @@ create table #Curr
 	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
-	Cost decimal(15,4) not null
+	Cost decimal(15,4) not null,
+	FeeAmt decimal(15,2) not null,
+	InstuFeeAmt decimal(15,2) not null
 );
 
 insert into 
 	#Curr
 exec 
 	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate;
-	
+
 --4.Calculate The Profit
-With FeeCalcResult as
-(
-	select
-		GateNo,
-		MerchantNo,
-		SUM(ISNULL(FeeAmt,0)) FeeAmt,
-		SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt
-	from
-		Table_FeeCalcResult
-	where
-		FeeEndDate >= @CurrStartDate
-		and
-		FeeEndDate < @CurrEndDate
-	group by
-		GateNo,
-		MerchantNo
-),
-CurrSum as
+With Result as
 (
 	select
 		GateNo,
 		MerchantNo,
 		SUM(ISNULL(TransSumCount,0)) TransSumCount,
 		SUM(ISNULL(TransSumAmount,0)) TransSumAmount,
-		SUM(ISNULL(Cost,0)) Cost
-	from	
-		#Curr 
+		SUM(ISNULL(Cost,0)) Cost,
+		SUM(ISNULL(FeeAmt,0)) FeeAmt,
+		SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt
+	from
+		#Curr
 	group by
 		GateNo,
 		MerchantNo
 )
-select
-	Curr.GateNo,
-	Curr.MerchantNo,
-	Curr.TransSumCount,
-	Curr.TransSumAmount,
-	FeeCalcResult.FeeAmt,
-	Curr.Cost,
-	FeeCalcResult.InstuFeeAmt
-into
-	#ResultWithProfit
-from
-	CurrSum Curr
-	left join
-	FeeCalcResult FeeCalcResult
-	on
-		Curr.GateNo = FeeCalcResult.GateNo
-		and
-		Curr.MerchantNo = FeeCalcResult.MerchantNo;
-
-
 --5.Get Gate&Merchant Description
 select
-	ResultProfit.GateNo,
+	Result.GateNo,
 	GateRoute.GateDesc,
-	ResultProfit.MerchantNo,
+	Result.MerchantNo,
 	MerInfo.MerchantName,
-	ResultProfit.TransSumCount,
-	ResultProfit.TransSumAmount/100.0 as TransSumAmount,
-	ResultProfit.FeeAmt/100.0 as FeeAmt,
-	ResultProfit.Cost/100.0 as Cost,
-	ResultProfit.InstuFeeAmt/100.0 as InstuFeeAmt
+	Result.TransSumCount,
+	Result.TransSumAmount/100.0 as TransSumAmount,
+	Result.Cost/100.0 as Cost,
+	Result.FeeAmt/100.0 as FeeAmt,
+	Result.InstuFeeAmt/100.0 as InstuFeeAmt
 from
-	#ResultWithProfit ResultProfit
+	Result
 	inner join
 	Table_GateRoute GateRoute
 	on
-		ResultProfit.GateNo = GateRoute.GateNo
+		Result.GateNo = GateRoute.GateNo
 	inner join
 	Table_MerInfo MerInfo
 	on
-		ResultProfit.MerchantNo = MerInfo.MerchantNo
+		Result.MerchantNo = MerInfo.MerchantNo
 order by
-	ResultProfit.GateNo,
-	ResultProfit.MerchantNo; 
-
-
+	Result.GateNo,
+	Result.MerchantNo; 
+	
 --6.Drop The Temporary Tables
-
 drop table #Curr;
-drop table #ResultWithProfit;
 
 end

@@ -2,7 +2,7 @@
 --Input:StartDate,EndDate
 --Output:GateNo,MerchantNo,FeeEndDate,TransCnt,TransAmt,CostAmt
 --[Modified] At 2012-03-21 By Chen.wu  Add @HisRefDate param
-
+--[Modified] At 2012-05-25 By ÍõºìÑà  Add @ConvertToRMB param
 if OBJECT_ID(N'Proc_CalPaymentCost',N'P') is not null
 begin
 	drop procedure Proc_CalPaymentCost;
@@ -12,7 +12,8 @@ go
 create procedure Proc_CalPaymentCost
 	@StartDate datetime = '2011-07-01',
 	@EndDate datetime = '2011-08-01',
-	@HisRefDate datetime = null
+	@HisRefDate datetime = null,
+	@ConvertToRMB char(2) = null
 as
 begin
 
@@ -29,27 +30,57 @@ end
 
 --2 get dailytrans
 select
-	GateNo,
-	MerchantNo,
-	FeeEndDate,
-	SUM(ISNULL(PurCnt,0)) PurCnt,
-	SUM(ISNULL(PurAmt,0)) PurAmt,
-	SUM(ISNULL(FeeAmt,0)) FeeAmt,
-	SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt,
-	SUM(ISNULL(BankFeeAmt,0)) BankFeeAmt
+	Fee.GateNo,
+	Fee.MerchantNo,
+	Fee.FeeEndDate,
+	Fee.PurCnt,
+	Fee.PurAmt,
+	Fee.FeeAmt,
+	Fee.InstuFeeAmt,
+	Fee.BankFeeAmt
 into
 	#FeeResult
 from
-	Table_FeeCalcResult
+	Table_FeeCalcResult Fee
 where
-	FeeEndDate >= @StartDate
+	Fee.FeeEndDate >= @StartDate
 	and
-	FeeEndDate < @EndDate
-group by
-	GateNo,
-	MerchantNo,
-	FeeEndDate;
+	Fee.FeeEndDate <  @EndDate
 
+if @ConvertToRMB = 'on'
+Begin
+	With CuryRate as
+	(
+		select
+			CuryCode,
+			AVG(CuryRate) AVGCuryRate 
+		from
+			Table_CuryFullRate
+		where
+			CuryDate >= @StartDate
+			and
+			CuryDate <  @EndDate
+		group by
+			CuryCode		
+	)
+	update 
+		Fee
+	set
+		Fee.PurAmt = ISNULL(CuryRate.AVGCuryRate, 1.0)*Fee.PurAmt,
+		Fee.FeeAmt = ISNULL(CuryRate.AVGCuryRate, 1.0)*Fee.FeeAmt,
+		Fee.InstuFeeAmt = ISNULL(CuryRate.AVGCuryRate, 1.0)*Fee.InstuFeeAmt,
+		Fee.BankFeeAmt = ISNULL(CuryRate.AVGCuryRate, 1.0)*Fee.BankFeeAmt
+	from
+		#FeeResult Fee
+		inner join
+		Table_MerInfoExt MerInfo
+		on
+			Fee.MerchantNo = MerInfo.MerchantNo
+		inner join
+		CuryRate
+		on
+			MerInfo.CuryCode = CuryRate.CuryCode;
+End
 --3. determin rule type
 
 --3.1 get daily trans with ApplyDate
@@ -58,17 +89,16 @@ create table #GateMerRule
 	GateNo char(4) not null,
 	MerchantNo char(20) not null,
 	FeeEndDate datetime not null,
-	SucceedTransCount int,
-	SucceedTransAmount decimal(14,2),
-	FeeAmt decimal(14, 2),
-	InstuFeeAmt decimal(14, 2),
-	BankFeeAmt decimal(14, 2),
-	Cost decimal(15, 4),
+	SucceedTransCount bigint,
+	SucceedTransAmount decimal(16,2),
+	FeeAmt decimal(16,2),
+	InstuFeeAmt decimal(16,2),
+	BankFeeAmt decimal(16,2),
+	Cost decimal(18,4),
 	CostRuleType varchar(20),
 	ApplyDate datetime,
 	NextApplyDate datetime
 );
-
 
 if @HisRefDate is not null
 begin
@@ -702,7 +732,9 @@ select
 	FeeEndDate,	
 	SUM(ISNULL(SucceedTransCount,0)) TransCnt,
 	SUM(ISNULL(SucceedTransAmount,0)) TransAmt,
-	SUM(ISNULL(Cost ,0)) as CostAmt
+	SUM(ISNULL(Cost,0)) as CostAmt,
+	SUM(ISNULL(FeeAmt,0)) as FeeAmt,
+	SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt
 from 
 	#GateMerRule
 group by
