@@ -1,5 +1,6 @@
 --[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
 --[Modified] At 20120503 By 王红燕:修改网关成本规则显示方法
+--[Modified] At 20120528 By 王红燕:配合调用的子存储过程做相应修改
 if OBJECT_ID(N'Proc_QueryFinancialCostCalByGateNo',N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialCostCalByGateNo;
@@ -91,7 +92,9 @@ create table #Curr
 	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
-	Cost decimal(15,4) not null
+	Cost decimal(15,4) not null,
+	FeeAmt decimal(15,2) not null,
+	InstuFeeAmt decimal(15,2) not null
 );
 
 insert into 
@@ -106,7 +109,9 @@ create table #Prev
 	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
-	Cost decimal(15,4) not null
+	Cost decimal(15,4) not null,
+	FeeAmt decimal(15,2) not null,
+	InstuFeeAmt decimal(15,2) not null
 );
 
 insert into
@@ -121,7 +126,9 @@ create table #LastYear
 	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
-	Cost decimal(15,4) not null
+	Cost decimal(15,4) not null,
+	FeeAmt decimal(15,2) not null,
+	InstuFeeAmt decimal(15,2) not null
 );
 
 insert into
