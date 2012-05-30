@@ -1,4 +1,5 @@
 --[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
+--[Modified] At 20120528 By 王红燕:配合调用的子存储过程做相应修改
 if OBJECT_ID(N'Proc_QueryGateGroupProfitCalc',N'P') is not null
 begin
 	drop procedure Proc_QueryGateGroupProfitCalc;
@@ -91,7 +92,9 @@ create table #Curr
 	FeeEndDate datetime not null,
 	TransSumCount bigint not null,
 	TransSumAmount bigint not null,
-	Cost decimal(15,4) not null
+	Cost decimal(15,4) not null,
+	FeeAmt decimal(15,2) not null,
+	InstuFeeAmt decimal(15,2) not null
 );
 
 insert into
@@ -107,29 +110,14 @@ with CurrSum as
 		GateNo,
 		SUM(ISNULL(TransSumCount,0)) SumCount,
 		SUM(ISNULL(TransSumAmount,0))SumAmount,
-		SUM(ISNULL(Cost,0)) Cost
+		SUM(ISNULL(Cost,0)) Cost,
+		SUM(ISNULL(FeeAmt,0)) FeeAmt,
+		SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt
 	from	
 		#Curr 
 	group by
 		GateNo
-),
-FeeCalcResult as
-(
-	select
-		GateNo,
-		SUM(ISNULL(FeeAmt,0)) FeeAmt,
-		SUM(ISNULL(InstuFeeAmt,0)) InstuFeeAmt
-	from
-		Table_FeeCalcResult
-	where
-		FeeEndDate >= @CurrStartDate
-		and
-		FeeEndDate < @CurrEndDate
-	group by
-		GateNo
 )
-
-
 --5.Get Result
 select
 	case when
@@ -143,8 +131,8 @@ select
 	GateRoute.GateDesc,
 	Curr.SumCount,
 	Curr.SumAmount/100.0 as SumAmount,
-	FeeResult.FeeAmt/100.0 as FeeAmt,
-	FeeResult.InstuFeeAmt/100.0 as InstuFeeAmt,
+	Curr.FeeAmt/100.0 as FeeAmt,
+	Curr.InstuFeeAmt/100.0 as InstuFeeAmt,
 	Curr.Cost/100.0 as Cost
 from
 	CurrSum Curr
@@ -155,12 +143,7 @@ from
 	inner join
 	Table_GateRoute GateRoute
 	on
-		Curr.GateNo = GateRoute.GateNo
-	inner join
-	FeeCalcResult FeeResult
-	on
-		Curr.GateNo = FeeResult.GateNo;
-	
+		Curr.GateNo = GateRoute.GateNo;	
 
 --6. Drop Temporary Tables
 drop table #Curr;
