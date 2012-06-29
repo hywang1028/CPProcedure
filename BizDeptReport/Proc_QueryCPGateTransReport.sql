@@ -1,3 +1,4 @@
+--[Modified] By ÍõºìÑà 2012-06-26 Description£ºGet DimGate Replaced by Table_GateCategory
 if OBJECT_ID(N'Proc_QueryCPGateTransReport', N'P') is not null
 begin
 	drop procedure Proc_QueryCPGateTransReport;
@@ -157,8 +158,8 @@ set @CurrTotalSucceedAmount = (select ISNULL(SUM(CurrSucceedAmount),0) from #Cur
 if @ReportCategory = N'Ã÷Ï¸'
 begin
 	select
-		DimGate.BankName,
-		DimGate.GateNo,
+		GateCategory.BankName,
+		GateCategory.GateNo,
 		CONVERT(decimal, ISNULL(Curr.CurrSucceedAmount, 0))/1000000 SucceedAmount,
 		CONVERT(decimal, ISNULL(Curr.CurrSucceedCount, 0))/10000 SucceedCount,
 		case when ISNULL(Curr.CurrSucceedCount, 0) = 0
@@ -192,25 +193,25 @@ begin
 		Convert(decimal,ISNULL(LastYear.LastYearSucceedAmount, 0))/1000000 LastYearSucceedAmount,
 		Convert(decimal,ISNULL(LastYear.LastYearSucceedCount, 0))/10000 LastYearSucceedCount
 	from
-		DimGate
+		Table_GateCategory GateCategory
 		left join
 		#CurrData Curr
 		on
-			DimGate.GateNo = Curr.GateNo
+			GateCategory.GateNo = Curr.GateNo
 		left join
 		#PrevData Prev
 		on
-			DimGate.GateNo = Prev.GateNo
+			GateCategory.GateNo = Prev.GateNo
 		left join
 		#LastYearData LastYear
 		on
-			DimGate.GateNo = LastYear.GateNo
+			GateCategory.GateNo = LastYear.GateNo
 		left join
 		#ThisYearRunningData ThisYearRunning
 		on
-			DimGate.GateNo = ThisYearRunning.GateNo
+			GateCategory.GateNo = ThisYearRunning.GateNo
 	where
-		len(DimGate.GateNo) = 4 
+		len(GateCategory.GateNo) = 4 
 		or
 		Curr.CurrSucceedAmount > 0
 		or
@@ -219,7 +220,7 @@ end
 else if @ReportCategory = N'»ã×Ü'
 begin
 	select
-		DimGate.BankName,
+		GateCategory.BankName,
 		'0' as GateNo,
 		CONVERT(decimal, SUM(ISNULL(Curr.CurrSucceedAmount, 0)))/1000000 SucceedAmount,
 		CONVERT(decimal, SUM(ISNULL(Curr.CurrSucceedCount, 0)))/10000 SucceedCount,
@@ -254,31 +255,31 @@ begin
 		Convert(decimal,SUM(ISNULL(LastYear.LastYearSucceedAmount, 0)))/1000000 LastYearSucceedAmount,
 		Convert(decimal,SUM(ISNULL(LastYear.LastYearSucceedCount, 0)))/10000 LastYearSucceedCount
 	from
-		DimGate
+		Table_GateCategory GateCategory
 		left join
 		#CurrData Curr
 		on
-			DimGate.GateNo = Curr.GateNo
+			GateCategory.GateNo = Curr.GateNo
 		left join
 		#PrevData Prev
 		on
-			DimGate.GateNo = Prev.GateNo
+			GateCategory.GateNo = Prev.GateNo
 		left join
 		#LastYearData LastYear
 		on
-			DimGate.GateNo = LastYear.GateNo
+			GateCategory.GateNo = LastYear.GateNo
 		left join
 		#ThisYearRunningData ThisYearRunning
 		on
-			DimGate.GateNo = ThisYearRunning.GateNo
+			GateCategory.GateNo = ThisYearRunning.GateNo
 	where
-		len(DimGate.GateNo) = 4 
+		len(GateCategory.GateNo) = 4 
 		or
 		Curr.CurrSucceedAmount > 0
 		or
 		Curr.CurrSucceedCount > 0
 	group by
-		DimGate.BankName;
+		GateCategory.BankName;
 end
 --9. Clear temp table
 drop table #CurrData;

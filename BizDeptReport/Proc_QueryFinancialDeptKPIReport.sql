@@ -1,4 +1,5 @@
 --[Created] At 20120528 By 王红燕:金融考核报表(境外数据已转为人民币数据)
+--[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
 if OBJECT_ID(N'Proc_QueryFinancialDeptKPIReport', N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialDeptKPIReport;
@@ -24,8 +25,8 @@ set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
 
 --3. Prepare Trans Data
---3.1 Prepare Other Biz Data
---3.1.1 Prepare Payment Cost and Income Data
+--3.0 Prepare Other Biz Data
+--3.0.1 Prepare Payment Cost and Income Data
 create table #ProcResult
 (
 	GateNo char(4) not null,
@@ -41,6 +42,78 @@ insert into
 	#ProcResult
 exec 
 	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	
+--3.0.2 Get Ora Trans Data
+create table #ProcOraCost
+(
+	BankSettingID char(10) not null,
+	MerchantNo char(20) not null,
+	CPDate datetime not null,
+	TransCnt bigint not null,
+	TransAmt bigint not null,
+	CostAmt decimal(15,4) not null
+);
+insert into 
+	#ProcOraCost
+exec 
+	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
+	
+With OraFee as
+(
+	select
+		Ora.MerchantNo,
+		SUM(Ora.FeeAmount)/100.0 FeeAmt
+	from
+		Table_OraTransSum Ora		
+	where
+		Ora.CPDate >= @CurrStartDate
+		and
+		Ora.CPDate <  @CurrEndDate
+		and
+		Ora.MerchantNo in (select distinct MerchantNo from Table_BelongToFinance)
+	group by
+		Ora.MerchantNo
+),
+OraCost as
+(
+	select
+		Ora.MerchantNo,
+		SUM(Ora.TransCnt)/10000.0 TransCnt,
+		SUM(Ora.TransAmt)/10000000000.0 TransAmt,
+		SUM(Ora.CostAmt)/100.0 CostAmt
+	from
+		#ProcOraCost Ora
+	where
+		Ora.MerchantNo in(select distinct MerchantNo from Table_BelongToFinance)
+	group by
+		Ora.MerchantNo
+)
+select
+	OraCost.MerchantNo,
+	OraCost.TransCnt,
+	OraCost.TransAmt,
+	OraFee.FeeAmt,
+	OraCost.CostAmt,
+	0 as InstuFeeAmt
+into
+	#OraTransData
+from
+	OraCost
+	inner join
+	OraFee
+	on
+		OraCost.MerchantNo = OraFee.MerchantNo;
+		
+update
+	Ora
+set
+	Ora.FeeAmt = (MerRate.FeeValue * Ora.TransCnt)/100.0
+from
+	#OraTransData Ora
+	inner join
+	Table_OraOrdinaryMerRate MerRate
+	on
+		Ora.MerchantNo = MerRate.MerchantNo;
 
 With PaymentData as
 (
@@ -115,6 +188,26 @@ withGateNoData as
 	group by
 		Finance.BizCategory,
 		Finance.MerchantNo
+),
+FinanceOraTransData as
+(
+	select
+		Finance.BizCategory,
+		Finance.MerchantNo,
+		(select MerchantName from Table_OraMerchants where MerchantNo = Finance.MerchantNo) as MerchantName,
+		Finance.BelongRate*ISNULL(Ora.TransAmt,0) TransAmt,
+		Finance.BelongRate*ISNULL(Ora.TransCnt,0) TransCnt,
+		Finance.BelongRate*ISNULL(Ora.FeeAmt,0) FeeAmt,
+		Finance.BelongRate*ISNULL(Ora.CostAmt,0) CostAmt, 
+		Finance.BelongRate*ISNULL(Ora.InstuFeeAmt,0) InstuFeeAmt
+	from
+		Table_BelongToFinance Finance
+		left join
+		#OraTransData Ora
+		on
+			Finance.MerchantNo = Ora.MerchantNo
+	where
+		Finance.GateNo = 'all'
 ),
 --3.1 Prepare Fund Data
 AllTransferData as
@@ -214,9 +307,12 @@ select
 union all
 select * from notwithGateNoData
 union all
-select * from withGateNoData;
+select * from withGateNoData
+union all
+select * from FinanceOraTransData;
 	
 --5.Drop Temp Table
 Drop table #ProcResult;
-
+Drop table #ProcOraCost;
+Drop table #OraTransData;
 End

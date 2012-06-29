@@ -1,3 +1,4 @@
+--[Modified] By Õı∫Ï—‡ 2012-06-26 Description£∫Get DimGate Replaced by Table_GateRoute
 if OBJECT_ID(N'Proc_QueryGateSucceedRatio', N'P') is not null
 begin
 	drop procedure Proc_QueryGateSucceedRatio;
@@ -134,8 +135,8 @@ group by
 
 --6. Get Total SucceedCount
 select
-	DimGate.BankName,
-	DimGate.GateNo,
+	GateRoute.BankName,
+	GateRoute.GateNo,
 	ISNULL(CurrCount.CurrSucceedCount, 0) CurrSucceedCount,
 	ISNULL(CurrCount.CurrTotalCount, 0) CurrTotalCount,
 	ISNULL(CurrCount.CurrFailedCount, 0) CurrFailedCount,
@@ -148,21 +149,21 @@ select
 into
 	#TotalCount
 from
-	DimGate
+	Table_GateCategory GateRoute 
 	left join
 	#CurrCount CurrCount
 	on
-		DimGate.GateNo = CurrCount.GateNo
+		GateRoute.GateNo = CurrCount.GateNo
 	left join
 	#PrevCount PrevCount
 	on
-		DimGate.GateNo = PrevCount.GateNo
+		GateRoute.GateNo = PrevCount.GateNo
 	left join
 	#LastYearCount LastYearCount
 	on
-		DimGate.GateNo = LastYearCount.GateNo
+		GateRoute.GateNo = LastYearCount.GateNo
 where
-	len(DimGate.GateNo) = 4 ;
+	len(GateRoute.GateNo) = 4 ;
 		
 --7. Get TotalRatio
 select
@@ -324,10 +325,10 @@ begin
 		#TempTotalRatio;			
 end
 --9. Clear temp table
---drop table #TotalRatio;
---drop table #TotalCount;
---drop table #LastYearCount;
---drop table #PrevCount;
---drop table #CurrCount;
+drop table #TotalRatio;
+drop table #TotalCount;
+drop table #LastYearCount;
+drop table #PrevCount;
+drop table #CurrCount;
 
 end 
