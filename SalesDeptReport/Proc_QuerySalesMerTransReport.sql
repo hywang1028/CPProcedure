@@ -1,3 +1,4 @@
+--[Modified] on 2012-06-08 By Õı∫Ï—‡ Description:Add West Union Trans Data
 if OBJECT_ID(N'Proc_QuerySalesMerTransReport', N'P') is not null
 begin
 	drop procedure Proc_QuerySalesMerTransReport;
@@ -60,6 +61,21 @@ CurrORAData as
 		CPDate < @CurrEndDate
 	group by
 		MerchantNo
+),
+CurrWUData as
+(
+	select
+		MerchantNo,
+		COUNT(DestTransAmount) as CurrSucceedCount,
+		SUM(DestTransAmount) as CurrSucceedAmount
+	from
+		dbo.Table_WUTransLog
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate < @CurrEndDate
+	group by
+		MerchantNo
 )
 select
 	coalesce(CurrCMCData.MerchantNo, CurrORAData.MerchantNo) MerchantNo,
@@ -72,7 +88,9 @@ from
 	full outer join
 	CurrORAData
 	on
-		CurrCMCData.MerchantNo = CurrORAData.MerchantNo;
+		CurrCMCData.MerchantNo = CurrORAData.MerchantNo
+union all
+select * from CurrWUData;
 		
 --4. Get Previous Data
 With PrevCMCData as
@@ -104,6 +122,21 @@ PrevORAData as
 		CPDate < @PrevEndDate
 	group by
 		MerchantNo
+),
+PrevWUData as
+(
+	select
+		MerchantNo,
+		COUNT(DestTransAmount) as CurrSucceedCount,
+		SUM(DestTransAmount) as CurrSucceedAmount
+	from
+		dbo.Table_WUTransLog
+	where
+		CPDate >= @PrevStartDate
+		and
+		CPDate < @PrevEndDate
+	group by
+		MerchantNo
 )
 select
 	coalesce(PrevCMCData.MerchantNo, PrevORAData.MerchantNo) MerchantNo,
@@ -116,7 +149,9 @@ from
 	full outer join
 	PrevORAData
 	on
-		PrevCMCData.MerchantNo = PrevORAData.MerchantNo;
+		PrevCMCData.MerchantNo = PrevORAData.MerchantNo
+union all
+select * from PrevWUData;
 		
 --5. Get LastYear Data
 With LastYearCMCData as
@@ -148,6 +183,21 @@ LastYearORAData as
 		Table_OraTransSum.CPDate < @LastYearEndDate
 	group by
 		MerchantNo
+),
+LastYearWUData as
+(
+	select
+		MerchantNo,
+		COUNT(DestTransAmount) as CurrSucceedCount,
+		SUM(DestTransAmount) as CurrSucceedAmount
+	from
+		dbo.Table_WUTransLog
+	where
+		CPDate >= @LastYearStartDate
+		and
+		CPDate < @LastYearEndDate
+	group by
+		MerchantNo
 )
 select
 	coalesce(LastYearCMCData.MerchantNo, LastYearORAData.MerchantNo) MerchantNo,
@@ -160,7 +210,9 @@ from
 	full outer join
 	LastYearORAData
 	on
-		LastYearCMCData.MerchantNo = LastYearORAData.MerchantNo;
+		LastYearCMCData.MerchantNo = LastYearORAData.MerchantNo
+union all
+select * from LastYearWUData;
 	
 --4. Get Result
 --4.1 Convert Currency Rate

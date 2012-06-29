@@ -27,7 +27,7 @@ into
 from
 	FactDailyTrans Trans
 	left join
-	DimGate Gate
+	Table_GateCategory Gate
 	on
 		Trans.GateNo = Gate.GateNo
 where

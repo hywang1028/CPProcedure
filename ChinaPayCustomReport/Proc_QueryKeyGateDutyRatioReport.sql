@@ -1,3 +1,4 @@
+--[Modified] By ÍõºìÑà 2012-06-26 Description£ºGet DimGate Replaced by Table_GateRoute
 if OBJECT_ID(N'Proc_QueryKeyGateDutyRatioReport', N'P') is not null
 begin
 	drop procedure Proc_QueryKeyGateDutyRatioReport;
@@ -100,16 +101,16 @@ END
 if @ReportCategory = N'Ã÷Ï¸'
 begin
 	SELECT TOP (CONVERT(int, @topnum)) 
-		(DimGate.BankName + DimGate.GateNo) AS GateNo, 
+		(GateRoute.GateDesc + GateRoute.GateNo) AS GateNo, 
 		SumValue.CurrSumValue
 	INTO 
 		#TopGate
 	FROM 
 		#SumValue SumValue 
 		INNER JOIN
-		DimGate 
+		Table_GateRoute GateRoute 
 		ON 
-			SumValue.GateNo = DimGate.GateNo
+			SumValue.GateNo = GateRoute.GateNo
 	ORDER BY 
 		SumValue.CurrSumValue DESC;
 
@@ -129,18 +130,18 @@ end
 else if @ReportCategory = N'»ã×Ü'
 begin
 	SELECT TOP (CONVERT(int, @topnum)) 
-		DimGate.BankName AS GateNo, 
+		GateRoute.GateDesc AS GateNo, 
 		SUM(SumValue.CurrSumValue) CurrSumValue
 	INTO 
 		#TopBank
 	FROM 
 		#SumValue SumValue 
 		INNER JOIN
-		DimGate 
+		Table_GateRoute GateRoute 
 		ON 
-			SumValue.GateNo = DimGate.GateNo
+			SumValue.GateNo = GateRoute.GateNo
 	group by
-		DimGate.BankName
+		GateRoute.GateDesc
 	ORDER BY 
 		CurrSumValue DESC;
 
