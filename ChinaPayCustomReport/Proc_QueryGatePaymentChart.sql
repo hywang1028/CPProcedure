@@ -1,3 +1,4 @@
+--[Modified] By 王红燕 2012-06-26 Description：Get DimGate Replaced by Table_GateRoute
 if OBJECT_ID(N'Proc_QueryGatePaymentChart', N'P') is not null
 begin
 	drop procedure Proc_QueryGatePaymentChart;
@@ -212,14 +213,14 @@ begin
 	if @SubjectCategory = '环比增量' 
 	begin
 		select top (Convert(int,@topnum))
-			(DimGate.BankName+DimGate.GateNo) AS GateNo,
+			(GateRoute.GateDesc+GateRoute.GateNo) AS GateNo,
 			DifferSum.PrevSumValue AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.PrevSumValue > 0
 		order by 
@@ -228,14 +229,14 @@ begin
 	else if  @SubjectCategory = '环比减量' 
 	begin 
 		select top (Convert(int,@topnum))
-			(DimGate.BankName+DimGate.GateNo) AS GateNo,
+			(GateRoute.GateDesc+GateRoute.GateNo) AS GateNo,
 			DifferSum.PrevSumValue AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.PrevSumValue < 0
 		order by
@@ -244,14 +245,14 @@ begin
 	else if  @SubjectCategory = '同比增量' 
 	begin 
 		select top (Convert(int,@topnum))
-			(DimGate.BankName+DimGate.GateNo) AS GateNo,
+			(GateRoute.GateDesc+GateRoute.GateNo) AS GateNo,
 			DifferSum.LastYearSumValue AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.LastYearSumValue > 0
 		order by	
@@ -260,14 +261,14 @@ begin
 	else if  @SubjectCategory = '同比减量' 
 	begin 
 		select top (Convert(int,@topnum))
-			(DimGate.BankName+DimGate.GateNo) AS GateNo,
+			(GateRoute.GateDesc+GateRoute.GateNo) AS GateNo,
 			DifferSum.LastYearSumValue AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.LastYearSumValue < 0
 		order by 
@@ -279,72 +280,72 @@ begin
 	if @SubjectCategory = '环比增量' 
 	begin
 		select top (Convert(int,@topnum))
-			DimGate.BankName AS GateNo,
+			GateRoute.GateDesc AS GateNo,
 			SUM(DifferSum.PrevSumValue) AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.PrevSumValue > 0
 		group by
-			DimGate.BankName
+			GateRoute.GateDesc
 		order by 
 			SumValue desc
 	end
 	else if  @SubjectCategory = '环比减量' 
 	begin 
 		select top (Convert(int,@topnum))
-			DimGate.BankName AS GateNo,
+			GateRoute.GateDesc AS GateNo,
 			SUM(DifferSum.PrevSumValue) AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.PrevSumValue < 0
 		group by
-			DimGate.BankName
+			GateRoute.GateDesc
 		order by
 			SumValue
 	end	
 	else if  @SubjectCategory = '同比增量' 
 	begin 
 		select top (Convert(int,@topnum))
-			DimGate.BankName AS GateNo,
+			GateRoute.GateDesc AS GateNo,
 			SUM(DifferSum.LastYearSumValue) AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.LastYearSumValue > 0
 		group by 
-			DimGate.BankName
+			GateRoute.GateDesc
 		order by	
 			SumValue DESC
 	end	
 	else if  @SubjectCategory = '同比减量' 
 	begin 
 		select top (Convert(int,@topnum))
-			DimGate.BankName AS GateNo,
+			GateRoute.GateDesc AS GateNo,
 			SUM(DifferSum.LastYearSumValue) AS SumValue
 		from
 			#DifferSum DifferSum
 			inner join 
-			DimGate
+			Table_GateRoute GateRoute
 			on
-				DifferSum.GateNo = DimGate.GateNo
+				DifferSum.GateNo = GateRoute.GateNo
 		where 
 			DifferSum.LastYearSumValue < 0
 		group by
-			DimGate.BankName
+			GateRoute.GateDesc
 		order by 
 			SumValue
 	end		
