@@ -11,7 +11,7 @@ create procedure Proc_QueryTempGateNoAmt
 	@StartDate datetime = '2012-01-01',
 	@EndDate datetime = '2012-01-30',
 	@TimeType char(10) = 'FeeDate',
-	@CurrencyType char(10) = 'RMB'
+	@CurrencyType char(10) = 'Orig'
 as
 begin
 --1. Check input
@@ -38,14 +38,14 @@ begin
 	where
 		ItemType = 'Gate';
 		
-	select distinct
+	select distinct	
 		GrpName,
-		ItemNo
-	into
-		#FinalGates
-	from
-		Table_GrpItemRelation
-	where
+		ItemNo	
+	into		
+		#FinalGates	
+	from		
+		Table_GrpItemRelation	
+	where		
 		ItemType = 'Gate';
 
 
@@ -55,6 +55,7 @@ begin
 		--4.1 Put Ora Amt data into #OraTransData
 		select
 			ORA.BankSettingID BankSettingID,
+			ORA.MerchantNo MerchantNo,
 			SUM(ORA.TransAmount) TransAmt,
 			SUM(ORA.TransCount) TransCnt
 		into
@@ -70,7 +71,9 @@ begin
 			and
 			ORA.CPDate < @CurrEndDate
 		group by
-			ORA.BankSettingID;
+			ORA.BankSettingID,
+			ORA.MerchantNo;
+
 
 --4.1 Put payment Amt Data Into 
 		select
@@ -136,6 +139,8 @@ begin
 		(
 			select
 				Ora.BankSettingID ItemNo,
+				Ora.MerchantNo MerchantNo,
+				(select MerchantName from Table_OraMerchants where MerchantNo = Ora.MerchantNo) as MerchantName,
 				TransAmt Amt,
 				TransCnt Cnt
 			from
@@ -143,16 +148,18 @@ begin
 			union all
 			select
 				Pay.GateNo ItemNo,
-				sum(TransAmt) Amt,
-				sum(TransCnt) Cnt
+				Pay.MerchantNo MerchantNo,
+				(select MerchantName from Table_MerInfo where MerchantNo = Pay.MerchantNo) MerchantName,
+				TransAmt Amt,
+				TransCnt Cnt
 			from
 				#PayTransData Pay
-			group by
-				Pay.GateNo
 		)
 		select
 			Gates.GrpName,
-			Gates.ItemNo as ItemNo,
+			ISNULL(Gates.ItemNo,N'') as ItemNo,
+			ISNULL(AllTransAmt.MerchantNo,N'') as MerchantNo,
+			ISNULL(AllTransAmt.MerchantName,N'') as MerchantName,
 			ISNULL(AllTransAmt.Amt, 0)/100.0 as Amt,
 			ISNULL(AllTransAmt.Cnt, 0) as Cnt,
 			0 as Fee,
@@ -163,11 +170,12 @@ begin
 			AllTransAmt
 			on
 				Gates.ItemNo = AllTransAmt.ItemNo;
-					
-			drop table #OraTransData;
-			drop table #PayTransData;
+
+
+		drop table #OraTransData;
+		drop table #PayTransData;
 	end
-		
+
 --5. @TimeType is FeeDate		
 	else if(@TimeType = 'FeeDate')				
 	begin					
@@ -201,7 +209,7 @@ begin
 --5.2 Put FeeORA Amt data into #OraData
 		select
 			OraTransSum.BankSettingID,
-			OraTransSum.MerchantNo,
+			OraTransSum.MerchantNo MerchantNo,
 			SUM(OraTransSum.FeeAmount) FeeAmt,
 			SUM(OraTransSum.TransCount) TransCnt
 		into
@@ -236,6 +244,7 @@ begin
 		(	
 			select
 				CalOraCost.BankSettingID,
+				CalOraCost.MerchantNo MerchantNo,
 				SUM(CalOraCost.TransAmt) TransAmt,
 				SUM(CalOraCost.TransCnt) TransCnt,
 				SUM(CalOraCost.CostAmt) CostAmt
@@ -246,20 +255,24 @@ begin
 				on
 					CalOraCost.BankSettingID = GateNo.ItemNo
 			group by
-				CalOraCost.BankSettingID
+				CalOraCost.BankSettingID,
+				CalOraCost.MerchantNo
 		),
 		OraFeeData as
 		(	
 			select
 				OraFee.BankSettingID,
-				SUM(OraFee.FeeAmt) as FeeAmt
+				OraFee.MerchantNo MerchantNo,
+				SUM(OraFee.FeeAmt) FeeAmt
 			from
 				#OraFeeData OraFee
 			group by
-				OraFee.BankSettingID
+				OraFee.BankSettingID,
+				OraFee.MerchantNo
 		)
 		select
 			OraCostData.BankSettingID,
+			OraCostData.MerchantNo,
 			OraCostData.TransAmt,
 			OraCostData.TransCnt,
 			OraFeeData.FeeAmt,
@@ -271,7 +284,9 @@ begin
 			inner join
 			OraFeeData
 			on
-				OraCostData.BankSettingID = OraFeeData.BankSettingID;
+				OraCostData.BankSettingID = OraFeeData.BankSettingID
+				and
+				OraCostData.MerchantNo = OraFeeData.MerchantNo;
 	
 	
 ----5.3 Convert to FeeValue
@@ -333,6 +348,7 @@ begin
 --5.6 Put PaymentCost Amt data into #PayBillingData
 		select
 			CalPaymentCost.GateNo,
+			CalPaymentCost.MerchantNo MerchantNo,
 			SUM(CalPaymentCost.TransAmt) TransAmt,
 			SUM(CalPaymentCost.TransCnt) TransCnt,
 			SUM(CalPaymentCost.FeeAmt) FeeAmt,
@@ -346,7 +362,8 @@ begin
 			on
 				CalPaymentCost.GateNo = GateNo.ItemNo
 		group by
-			CalPaymentCost.GateNo;
+			CalPaymentCost.GateNo,
+			CalPaymentCost.MerchantNo;
 		
 		
 --5.7 Query Final Result
@@ -354,6 +371,8 @@ begin
 		(
 			select
 				Ora.BankSettingID ItemNo,
+				Ora.MerchantNo MerchantNo,
+				(select MerchantName from Table_OraMerchants where MerchantNo = Ora.MerchantNo ) as MerchantName,
 				Ora.TransAmt Amt,
 				Ora.TransCnt Cnt,
 				Ora.FeeAmt Fee,
@@ -363,6 +382,8 @@ begin
 			union all
 			select
 				Pay.GateNo ItemNo,
+				Pay.MerchantNo MerchantNo,
+				(select MerchantName from Table_MerInfo where MerchantNo = Pay.MerchantNo) as MerchantName,
 				Pay.TransAmt Amt,
 				Pay.TransCnt Cnt,
 				Pay.FeeAmt Fee,
@@ -372,7 +393,9 @@ begin
 		)
 		select
 			GateNo.GrpName,
-			GateNo.ItemNo as ItemNo,
+			GateNo.ItemNo,
+			AllBillingAmt.MerchantNo,
+			AllBillingAmt.MerchantName,
 			ISNULL(AllBillingAmt.Amt, 0)/100.0 as Amt,
 			ISNULL(AllBillingAmt.Cnt, 0) as Cnt,
 			ISNULL(AllBillingAmt.Fee, 0)/100.0 as Fee,
@@ -382,7 +405,8 @@ begin
 			left join
 			AllBillingAmt
 			on
-				GateNo.ItemNo = AllBillingAmt.ItemNo;
+				GateNo.ItemNo = AllBillingAmt.ItemNo
+		
 		
 --5.8 Drop Table 
 		drop table #CalOraCost;
