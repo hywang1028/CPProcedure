@@ -3,7 +3,7 @@ begin
 	drop procedure Proc_QueryCheckInputFunds;	
 end
 go
-
+ 
 create procedure Proc_QueryCheckInputFunds  
  @StartDate datetime = '2012-01-01',  
  @EndDate datetime = '2012-09-20'  
