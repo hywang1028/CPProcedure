@@ -2,6 +2,8 @@
 --Input:StartDate，PeriodUnit，EndDate
 --Output:分公司,商户代码,商户名称,商户类型,上线时间,一般网上支付(笔数/金额),互联宝(笔数/金额),网上批扣(笔数/金额),便民(笔数/金额),商城(笔数/金额),代付(笔数/金额)
 --Modified By 王红燕 2012-04-09 修改原因:将商户开户日期的口径改使用吴迪给出数据
+--[Modified] at 2012-07-13 by 王红燕  Description:Add Financial Dept Configuration Data
+--[Modified] at 2012-09-07 by 王红燕  Description:根据用户的报表变更需求变更
 if OBJECT_ID(N'Proc_Query2012UmsMerTransReport', N'P') is not null
 begin
 	drop procedure Proc_Query2012UmsMerTransReport;
@@ -11,7 +13,8 @@ go
 create procedure Proc_Query2012UmsMerTransReport
 	@StartDate datetime = '2012-01-01',
 	@PeriodUnit nchar(4) = N'月',
-	@EndDate datetime = '2012-02-01'
+	@EndDate datetime = '2012-02-01',
+	@TransType nchar(10) = N'总交易量'
 as
 begin
 
@@ -52,6 +55,51 @@ begin
 end;
 
 --3. Prepare All Data
+--3.0 Get GateNo Config Data
+Create table #GateNo
+(
+	GateNo char(4) not null
+);
+
+if(@TransType = N'总交易量')
+begin
+    insert into #GateNo
+    select
+		GateNo
+    from
+		Table_GateRoute;
+end
+else if(@TransType = N'B2C(除UPOP)')
+begin
+	insert into #GateNo
+    select
+		GateNo
+    from
+		Table_GateRoute
+	where
+		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in ('B2B','UPOP',N'代扣'));
+end
+else if(@TransType = N'B2B')
+begin
+	insert into #GateNo
+    select
+		GateNo
+    from
+		Table_GateCategory
+	where
+		GateCategory1 = 'B2B';
+end
+else if(@TransType = N'UPOP')
+begin
+	insert into #GateNo
+    select
+		GateNo
+    from
+		Table_GateCategory
+	where
+		GateCategory1 = 'UPOP';
+end;
+
 --3.1 Prepare Product Trans Data
 --3.1.0 Prepare All Payment Data
 With ValidPayData as
@@ -63,6 +111,10 @@ With ValidPayData as
 		SUM(Trans.SucceedTransAmount) as TransAmt
 	from
 		FactDailyTrans Trans
+		inner join
+		#GateNo GateNo
+		on
+			Trans.GateNo = GateNo.GateNo
 	where
 		Trans.DailyTransDate >= @CurrStartDate
 		and
@@ -74,24 +126,28 @@ With ValidPayData as
 InvalidPayData as
 (
 	select 
-		DailyTransLog_MerchantNo MerchantNo,
-		DailyTransLog_GateNo GateNo,
-		SUM(DailyTransLog_SucceedTransCount) as TransCnt,
-		SUM(DailyTransLog_SucceedTransAmount) as TransAmt
+		Trans.DailyTransLog_MerchantNo MerchantNo,
+		Trans.DailyTransLog_GateNo GateNo,
+		SUM(Trans.DailyTransLog_SucceedTransCount) as TransCnt,
+		SUM(Trans.DailyTransLog_SucceedTransAmount) as TransAmt
 	from
-		Table_InvalidDailyTrans
+		Table_InvalidDailyTrans Trans
+		inner join
+		#GateNo GateNo
+		on
+			Trans.DailyTransLog_GateNo = GateNo.GateNo
 	where
-		DailyTransLog_Date >= @CurrStartDate
+		Trans.DailyTransLog_Date >= @CurrStartDate
 		and
-		DailyTransLog_Date < @CurrEndDate
+		Trans.DailyTransLog_Date < @CurrEndDate
 	group by
-		DailyTransLog_MerchantNo,
-		DailyTransLog_GateNo
+		Trans.DailyTransLog_MerchantNo,
+		Trans.DailyTransLog_GateNo
 )
 select
 	coalesce(Data.MerchantNo,Invalid.MerchantNo) MerchantNo,
 	coalesce(Data.GateNo,Invalid.GateNo) GateNo,
-	Convert(decimal,(ISNULL(Data.TransAmt,0)+ISNULL(Invalid.TransAmt,0)))/100 TransAmt,
+	ISNULL(Data.TransAmt,0)+ISNULL(Invalid.TransAmt,0) TransAmt,
 	ISNULL(Data.TransCnt,0)+ISNULL(Invalid.TransCnt,0) TransCnt
 into
 	#PaymentData
@@ -187,7 +243,7 @@ With EmallTransSum as
 		MerchantName,
 		MerchantNo,
 		SUM(SucceedTransCount) TransCnt,
-		Convert(decimal,SUM(SucceedTransAmount))/100 TransAmt
+		SUM(SucceedTransAmount) TransAmt
 	 from
 		Table_EmallTransSum
 	 where
@@ -214,8 +270,8 @@ select
 	0 as DeductTransAmt,
 	0 as ConvenienceTransCnt,
 	0 as ConvenienceTransAmt,
-	EmallTransSum.TransCnt as EmallTransCnt,
-	EmallTransSum.TransAmt as EmallTransAmt,
+	EmallTransSum.TransCnt/10000.0 as EmallTransCnt,
+	EmallTransSum.TransAmt/1000000.0 as EmallTransAmt,
 	0 as ORATransCnt,
 	0 as ORATransAmt
 into
@@ -243,7 +299,7 @@ With ORATransData as
 	select
 		MerchantNo,
 		SUM(TransCount) TransCnt,
-		CONVERT(decimal,SUM(TransAmount))/100 TransAmt
+		SUM(TransAmount) TransAmt
 	from
 		Table_OraTransSum
 	where 
@@ -258,7 +314,7 @@ WUTransData as
 	select
 		MerchantNo,
 		COUNT(DestTransAmount) TransCnt,
-		CONVERT(decimal,SUM(DestTransAmount))/100 TransAmt
+		SUM(DestTransAmount) TransAmt
 	from
 		Table_WUTransLog
 	where
@@ -333,7 +389,7 @@ from
 		PayMer.MerchantNo = OraMer.MerchantNo;
 		
 --3.3 Join All Config Data
-With MerBranchOffice as
+With SalesBranchOffice as
 (
 	select
 		Sales.MerchantNo,
@@ -343,7 +399,31 @@ With MerBranchOffice as
 		left join
 		Table_BranchOfficeNameRule BranchOffice
 		on
-			Sales.BranchOffice = BranchOffice.UnnormalBranchOfficeName
+			RTRIM(Sales.BranchOffice) = RTRIM(BranchOffice.UnnormalBranchOfficeName)
+),
+FinanceBranchOffice as
+(
+	select
+		Finance.MerchantNo,
+		BranchOffice.UmsSpec BranchOffice
+	from
+		Table_FinancialDeptConfiguration Finance
+		left join
+		Table_BranchOfficeNameRule BranchOffice
+		on
+			RTRIM(Finance.BranchOffice) = RTRIM(BranchOffice.UnnormalBranchOfficeName)
+),
+MerBranchOffice as
+(
+	select
+		Coalesce(Sales.MerchantNo,Finance.MerchantNo) MerchantNo,
+		Coalesce(Sales.BranchOffice,Finance.BranchOffice) BranchOffice
+	from
+		SalesBranchOffice Sales
+		full outer join
+		FinanceBranchOffice Finance 
+		on
+			RTRIM(Sales.MerchantNo) = RTRIM(Finance.MerchantNo)
 ),
 AllTransData as
 (
@@ -391,18 +471,20 @@ select
 	AllTransData.MerchantName,
 	coalesce(MerType.MerchantType,N'') MerchantType,
 	case when MerType.OpenAccountDate is not null then Convert(char(10),MerType.OpenAccountDate,120) else N'' End as OpenTime,
-	ISNULL(AllTransData.PayTransCnt,0) PayTransCnt,
-	ISNULL(AllTransData.PayTransAmt,0) PayTransAmt,
-	ISNULL(AllTransData.EPOSTransCnt,0) EPOSTransCnt,
-	ISNULL(AllTransData.EPOSTransAmt,0) EPOSTransAmt,
-	ISNULL(AllTransData.DeductTransCnt,0) DeductTransCnt,
-	ISNULL(AllTransData.DeductTransAmt,0) DeductTransAmt,
-	ISNULL(AllTransData.ConvenienceTransCnt,0) ConvenienceTransCnt,
-	ISNULL(AllTransData.ConvenienceTransAmt,0) ConvenienceTransAmt,
+	ISNULL(AllTransData.PayTransCnt,0)/10000.0 PayTransCnt,
+	ISNULL(AllTransData.PayTransAmt,0)/1000000.0 PayTransAmt,
+	ISNULL(AllTransData.EPOSTransCnt,0)/10000.0 EPOSTransCnt,
+	ISNULL(AllTransData.EPOSTransAmt,0)/1000000.0 EPOSTransAmt,
+	ISNULL(AllTransData.DeductTransCnt,0)/10000.0 DeductTransCnt,
+	ISNULL(AllTransData.DeductTransAmt,0)/1000000.0 DeductTransAmt,
+	ISNULL(AllTransData.ConvenienceTransCnt,0)/10000.0 ConvenienceTransCnt,
+	ISNULL(AllTransData.ConvenienceTransAmt,0)/1000000.0 ConvenienceTransAmt,
 	0 as EmallTransCnt,
 	0 as EmallTransAmt,
-	ISNULL(AllTransData.ORATransCnt,0) ORATransCnt,
-	ISNULL(AllTransData.ORATransAmt,0) ORATransAmt
+	case when @TransType = N'总交易量' then ISNULL(AllTransData.ORATransCnt,0)/10000.0 Else 0 End as ORATransCnt,
+	case when @TransType = N'总交易量' then ISNULL(AllTransData.ORATransAmt,0)/1000000.0 Else 0 End as ORATransAmt
+into
+	#Result
 from
 	AllTransData
 	left join
@@ -412,14 +494,22 @@ from
 	left join
 	Table_MerOpenAccountInfo MerType
 	on
-		AllTransData.MerchantNo = MerType.MerchantNo
-union all
-select * from #EmallTransData
-order by
-	OrderID,
-	BranchOffice;	
+		AllTransData.MerchantNo = MerType.MerchantNo;
+
+if(@TransType = N'B2B' or @TransType = 'UPOP')
+begin
+    select * from #Result order by OrderID,BranchOffice;
+end
+else if(@TransType = N'总交易量' or @TransType = N'B2C(除UPOP)')
+begin
+	select * from #Result
+	union all
+	select * from #EmallTransData
+	order by OrderID,BranchOffice;	
+End
 
 --4. Drop Table
+Drop table #GateNo;
 Drop Table #PaymentData;
 Drop Table #EPOSTransData;
 Drop Table #DeductTransData;
@@ -429,5 +519,6 @@ Drop Table #ORAWUTransData;
 Drop Table #EmallTakeOffData;
 Drop Table #PaymentTransData;
 Drop Table #MerOpenTime;
+Drop table #Result;
 
 End

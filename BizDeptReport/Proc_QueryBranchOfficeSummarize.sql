@@ -1,3 +1,4 @@
+--[Modified] at 2012-07-13 by Õı∫Ï—‡  Description:Add Financial Dept Configuration Data
 if OBJECT_ID(N'Proc_QueryBranchOfficeSummarize',N'P') is not null
 begin
 	drop procedure Proc_QueryBranchOfficeSummarize;
@@ -111,61 +112,65 @@ where
 
 
 --4.Get MerchantNoWithBranchOffice 
-select
-	SalesDeptConfig.MerchantNo,
-	BranchOfficeNameRule.UmsSpec BranchOffice
+With SalesBranchOffice as
+(
+	select
+		SalesDeptConfig.MerchantNo,
+		BranchOfficeNameRule.UmsSpec BranchOffice
+	from
+		Table_SalesDeptConfiguration SalesDeptConfig
+		inner join
+		Table_BranchOfficeNameRule BranchOfficeNameRule
+		on
+			SalesDeptConfig.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+			and
+			ISNULL(BranchOfficeNameRule.UmsSpec,N'') <> N''
+),
+FinanceBranchOffice as 
+(
+	select
+		Finance.MerchantNo,
+		BranchOfficeNameRule.UmsSpec BranchOffice
+	from
+		Table_FinancialDeptConfiguration Finance
+		inner join
+		Table_BranchOfficeNameRule BranchOfficeNameRule
+		on
+			Finance.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+			and
+			ISNULL(BranchOfficeNameRule.UmsSpec,N'') <> N''
+)
+select 
+	coalesce(SalesBranchOffice.MerchantNo, FinanceBranchOffice.MerchantNo) MerchantNo,
+	coalesce(SalesBranchOffice.BranchOffice, FinanceBranchOffice.BranchOffice) BranchOffice
 into
 	#MerWithBranch
 from
-	Table_SalesDeptConfiguration SalesDeptConfig
-	inner join
-	Table_BranchOfficeNameRule BranchOfficeNameRule
+	SalesBranchOffice
+	full outer join 
+	FinanceBranchOffice
 	on
-		SalesDeptConfig.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
-		and
-		ISNULL(BranchOfficeNameRule.UmsSpec,N'') <> N'';
+		SalesBranchOffice.MerchantNo = FinanceBranchOffice.MerchantNo;
 
 
 --5. Get Respectively BranchOffice
 select
 	MerWithBranch.BranchOffice,
-	OraTransSum.MerchantNo,
-	OraTransSum.TransCount,
-	OraTransSum.TransAmount
-into
-	#OraAndDaily
-from
-	#MerWithBranch MerWithBranch
-	inner join
-	#OraTransSum OraTransSum
-	on
-		MerWithBranch.MerchantNo = OraTransSum.MerchantNo
-union all	
-select
-	MerWithBranch.BranchOffice,
-	FactDailyTrans.MerchantNo,
-	FactDailyTrans.TransCount,
-	FactDailyTrans.TransAmount
-from
-	#MerWithBranch MerWithBranch
-	inner join
-	#FactDailyTrans FactDailyTrans
-	on
-		MerWithBranch.MerchantNo = FactDailyTrans.MerchantNo;
-
-select
-	MerWithBranch.BranchOffice,
 	MerWithBranch.MerchantNo,
-	OraAndDaily.TransCount,
-	OraAndDaily.TransAmount
+	ISNULL(OraTransSum.TransCount,0)+ISNULL(FactDailyTrans.TransCount,0) TransCount,
+	ISNULL(OraTransSum.TransAmount,0)+ISNULL(FactDailyTrans.TransAmount,0) TransAmount
 into
 	#OraAndDailyWithBranch
 from
 	#MerWithBranch MerWithBranch
 	left join
-	#OraAndDaily OraAndDaily
+	#OraTransSum OraTransSum
 	on
-		MerWithBranch.MerchantNo = OraAndDaily.MerchantNo;
+		MerWithBranch.MerchantNo = OraTransSum.MerchantNo
+	left join
+	#FactDailyTrans FactDailyTrans
+	on
+		MerWithBranch.MerchantNo = FactDailyTrans.MerchantNo;
 
 
 --6. Union All Data
@@ -260,7 +265,7 @@ drop table #FactDailyTrans;
 drop table #EmallTransSum;
 drop table #NewlyOpenMer;
 drop table #MerWithBranch;
-drop table #OraAndDaily;
+--drop table #OraAndDaily;
 drop table #OraAndDailyWithBranch;
 drop table #AllMerWithBranch;
 drop table #Result;

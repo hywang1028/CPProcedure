@@ -202,7 +202,7 @@ select
 	Convert(decimal, ISNULL(LastYear.NetPurchaseAmount, 0))/1000000 LastYearNetPurchaseAmount,
 	Convert(decimal, ISNULL(LastYear.TotalAmount, 0))/1000000 LastYearTotalAmount
 from
-	Table_BizFundBank BizFundBank
+	Table_BankID BizFundBank
 	left join
 	#CurrData Curr
 	on

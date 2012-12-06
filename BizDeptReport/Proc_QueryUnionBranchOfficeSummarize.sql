@@ -1,3 +1,4 @@
+--[Modified] at 2012-07-13 by Õı∫Ï—‡  Description:Add Financial Dept Configuration Data
 if OBJECT_ID(N'Proc_QueryUnionBranchOfficeSummarize',N'P') is not null
 begin
 	drop procedure Proc_QueryUnionBranchOfficeSummarize;
@@ -122,6 +123,18 @@ from
 	Table_BranchOfficeNameRule BranchOfficeNameRule
 	on
 		SalesDeptConfig.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+		and
+		ISNULL(BranchOfficeNameRule.UnionPaySpec,N'') <> N''
+union
+select
+	Finance.MerchantNo,
+	BranchOfficeNameRule.UnionPaySpec BranchOffice
+from
+	Table_FinancialDeptConfiguration Finance
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		Finance.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
 		and
 		ISNULL(BranchOfficeNameRule.UnionPaySpec,N'') <> N'';
 		

@@ -1,3 +1,4 @@
+--[Modified] at 2012-07-13 by Õı∫Ï—‡  Description:Add Financial Dept Configuration Data
 if OBJECT_ID(N'Proc_QueryUnionBranchOfficeMonthlyTrans',N'P') is not null
 begin
 	drop procedure Proc_QueryUnionBranchOfficeMonthlyTrans;
@@ -110,6 +111,22 @@ from
 
 
 --5. Get AllMerTransWithBo
+With MerBranchOffice as
+(
+	select
+		SalesDeptConfig.MerchantNo
+	from
+		Table_SalesDeptConfiguration SalesDeptConfig
+	where
+		SalesDeptConfig.BranchOffice = @BranchOfficeName
+	union
+	select
+		Finance.MerchantNo
+	from
+		Table_FinancialDeptConfiguration Finance
+	where
+		Finance.BranchOffice = @BranchOfficeName
+)
 select
 	AllMerTrans.MerchantNo,
 	AllMerTrans.TransAmount,
@@ -119,11 +136,9 @@ into
 from
 	#AllMerTrans AllMerTrans
 	inner join
-	Table_SalesDeptConfiguration SalesDeptConfig
+	MerBranchOffice
 	on
-		AllMerTrans.MerchantNo = SalesDeptConfig.MerchantNo
-where
-	SalesDeptConfig.BranchOffice = @BranchOfficeName
+		AllMerTrans.MerchantNo = MerBranchOffice.MerchantNo
 union all
 select
 	MerchantNo,
