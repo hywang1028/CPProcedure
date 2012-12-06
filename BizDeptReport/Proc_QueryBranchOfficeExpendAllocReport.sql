@@ -1,4 +1,5 @@
 --[Created] At 20120618 By 王红燕:分公司业务费用配置报表(境外数据已转为人民币数据)
+--[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 if OBJECT_ID(N'Proc_QueryBranchOfficeExpendAllocReport', N'P') is not null
 begin
 	drop procedure Proc_QueryBranchOfficeExpendAllocReport;
@@ -22,6 +23,8 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
+declare @HisRefDate datetime;
+set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
 
 --1. Get Branch Office Merchant List
 select
@@ -53,7 +56,7 @@ create table #PayProcData
 insert into 
 	#PayProcData
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,@HisRefDate,'on';
 
 --2.2 Get Branch Mer Ora Trans Data
 create table #ProcOraCost
@@ -68,7 +71,7 @@ create table #ProcOraCost
 insert into 
 	#ProcOraCost
 exec 
-	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
+	Proc_CalOraCost @CurrStartDate,@CurrEndDate,@HisRefDate;
 	
 With OraFee as
 (

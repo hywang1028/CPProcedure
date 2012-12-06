@@ -156,7 +156,7 @@ group by
 
 --7. Get Result
 select
-	BizFundMerchant.MerchantName,
+	(select MerchantName from Table_MerInfo where MerchantNo = coalesce(Curr.MerchantNo,Prev.MerchantNo,LastYear.MerchantNo,ThisYearRunning.MerchantNo)) MerchantName,
 	Curr.RegisterCount,
 	CONVERT(decimal,Curr.PurchaseCount)/10000 PurchaseCount,
 	CONVERT(decimal,Curr.RetractCount)/10000 RetractCount,
@@ -187,23 +187,19 @@ select
 	Convert(decimal,ISNULL(LastYear.NetPurchaseCount, 0))/1000000 LastYearNetPurchaseCount,
 	Convert(decimal,ISNULL(LastYear.TotalCount, 0))/10000 LastYearTotalCount
 from
-	Table_BizFundMerchant BizFundMerchant
-	left join
 	#CurrData Curr
-	on
-		BizFundMerchant.MerchantNo = Curr.MerchantNo
-	left join
+	full outer join
 	#PrevData Prev
 	on
-		BizFundMerchant.MerchantNo = Prev.MerchantNo
-	left join
+		Curr.MerchantNo = Prev.MerchantNo
+	full outer join
 	#LastYearData LastYear
 	on
-		BizFundMerchant.MerchantNo = LastYear.MerchantNo
-	left join
+		coalesce(Curr.MerchantNo,Prev.MerchantNo) = LastYear.MerchantNo
+	full outer join
 	#ThisYearRunningData ThisYearRunning
 	on
-		BizFundMerchant.MerchantNo = ThisYearRunning.MerchantNo;
+		coalesce(Curr.MerchantNo,Prev.MerchantNo,LastYear.MerchantNo) = ThisYearRunning.MerchantNo;
 	
 --8. Clear temp table
 drop table #CurrData;

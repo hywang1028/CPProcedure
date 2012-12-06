@@ -1,4 +1,5 @@
 --[Created] At 20120530 By 王红燕:金融考核报表之银行成本降低额明细表(境外数据已转为人民币数据)
+--[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 if OBJECT_ID(N'Proc_QueryFinancialCostReduceReport', N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialCostReduceReport;
@@ -23,7 +24,7 @@ declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
 declare @HisRefDate datetime;
-set @HisRefDate = DATEADD(DAY, -1, @StartDate);
+set @HisRefDate = DATEADD(DAY, -1, '2012-01-01');
 
 --3. Prepare Trans Data
 create table #ActualPayCost

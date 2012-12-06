@@ -163,7 +163,7 @@ set @CurrTotalAmount = (select ISNULL(SUM(TotalAmount),0) from #CurrData);
 
 --8. Get Result
 select
-	BizFundMerchant.MerchantName,
+	(select MerchantName from Table_MerInfo where MerchantNo = coalesce(Curr.MerchantNo,Prev.MerchantNo,LastYear.MerchantNo,ThisYearRunning.MerchantNo)) MerchantName,
 	Curr.RegisterCount,
 	CONVERT(decimal,Curr.PurchaseAmount)/1000000 PurchaseAmount,
 	CONVERT(decimal,Curr.RetractAmount)/1000000 RetractAmount,
@@ -202,23 +202,19 @@ select
 	Convert(decimal, ISNULL(LastYear.NetPurchaseAmount, 0))/1000000 LastYearNetPurchaseAmount,
 	Convert(decimal, ISNULL(LastYear.TotalAmount, 0))/1000000 LastYearTotalAmount
 from
-	Table_BizFundMerchant BizFundMerchant
-	left join
 	#CurrData Curr
-	on
-		BizFundMerchant.MerchantNo = Curr.MerchantNo
-	left join
+	full outer join
 	#PrevData Prev
 	on
-		BizFundMerchant.MerchantNo = Prev.MerchantNo
-	left join
+		Curr.MerchantNo = Prev.MerchantNo
+	full outer join
 	#LastYearData LastYear
 	on
-		BizFundMerchant.MerchantNo = LastYear.MerchantNo
-	left join
+		coalesce(Curr.MerchantNo,Prev.MerchantNo) = LastYear.MerchantNo
+	full outer join
 	#ThisYearRunningData ThisYearRunning
 	on
-		BizFundMerchant.MerchantNo = ThisYearRunning.MerchantNo;
+		coalesce(Curr.MerchantNo,Prev.MerchantNo,LastYear.MerchantNo) = ThisYearRunning.MerchantNo;
 	
 --9. Clear temp table
 drop table #CurrData;
