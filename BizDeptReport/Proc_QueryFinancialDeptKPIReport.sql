@@ -1,5 +1,6 @@
 --[Created] At 20120528 By 王红燕:金融考核报表(境外数据已转为人民币数据)
 --[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
+--[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 if OBJECT_ID(N'Proc_QueryFinancialDeptKPIReport', N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialDeptKPIReport;
@@ -23,6 +24,8 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
+declare @HisRefDate datetime;
+set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
 
 --3. Prepare Trans Data
 --3.0 Prepare Other Biz Data
@@ -41,7 +44,7 @@ create table #ProcResult
 insert into 
 	#ProcResult
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,@HisRefDate,'on';
 	
 --3.0.2 Get Ora Trans Data
 create table #ProcOraCost
@@ -56,7 +59,7 @@ create table #ProcOraCost
 insert into 
 	#ProcOraCost
 exec 
-	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
+	Proc_CalOraCost @CurrStartDate,@CurrEndDate,@HisRefDate;
 	
 With OraFee as
 (
@@ -111,7 +114,7 @@ set
 from
 	#OraTransData Ora
 	inner join
-	Table_OraOrdinaryMerRate MerRate
+	Table_OraAdditionalFeeRule MerRate
 	on
 		Ora.MerchantNo = MerRate.MerchantNo;
 

@@ -1,5 +1,6 @@
 --[Created] At 20120619 By 王红燕：CP内部业务费用配置报表(境外数据已转为人民币数据)
 --[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
+--[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 if OBJECT_ID(N'Proc_QueryCorpInnerExpendAllocReport', N'P') is not null
 begin
 	drop procedure Proc_QueryCorpInnerExpendAllocReport;
@@ -23,6 +24,8 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
+declare @HisRefDate datetime;
+set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
 
 --1. Get Branch Office Merchant List
 select
@@ -51,7 +54,7 @@ create table #ProcOraCost
 insert into 
 	#ProcOraCost
 exec 
-	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
+	Proc_CalOraCost @CurrStartDate,@CurrEndDate,@HisRefDate;
 	
 With OraFee as
 (
@@ -107,7 +110,7 @@ set
 from
 	#OraTransData Ora
 	inner join
-	Table_OraOrdinaryMerRate MerRate
+	Table_OraAdditionalFeeRule MerRate
 	on
 		Ora.MerchantNo = MerRate.MerchantNo;
 		
@@ -127,7 +130,7 @@ create table #PayProcData
 insert into 
 	#PayProcData
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,@HisRefDate,'on';
 	
 select 
 	MerchantNo,
@@ -607,9 +610,9 @@ CupSecureFundTrans as
 	from
 		FactDailyTrans
 	where
-		DailyTransDate >= @StartDate
+		DailyTransDate >= @CurrStartDate
 		and
-		DailyTransDate <  @EndDate
+		DailyTransDate <  @CurrEndDate
 		and
 		GateNo in ('0044','0045')
 		and

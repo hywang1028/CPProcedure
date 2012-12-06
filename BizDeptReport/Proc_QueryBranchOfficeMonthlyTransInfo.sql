@@ -1,3 +1,4 @@
+--[Modified] at 2012-07-13 by Õı∫Ï—‡  Description:Add Financial Dept Configuration Data
 if OBJECT_ID(N'Proc_QueryBranchOfficeMonthlyTransInfo',N'P') is not null
 begin
 	drop procedure Proc_QueryBranchOfficeMonthlyTransInfo;
@@ -120,6 +121,16 @@ from
 	Table_SalesDeptConfiguration SalesDeptConfiguration
 	on
 		BranchOfficeNameRule.UnnormalBranchOfficeName = SalesDeptConfiguration.BranchOffice
+where	BranchOfficeNameRule.UmsSpec = @BranchOfficeName
+union 
+select
+	Finance.MerchantNo
+from
+	Table_BranchOfficeNameRule BranchOfficeNameRule 
+	inner join
+	Table_FinancialDeptConfiguration Finance
+	on
+		BranchOfficeNameRule.UnnormalBranchOfficeName = Finance.BranchOffice
 where	BranchOfficeNameRule.UmsSpec = @BranchOfficeName;
 
 

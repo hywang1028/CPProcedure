@@ -19,40 +19,6 @@ begin
 	raiserror(N'Input params cannot be empty in Proc_QueryUnusualMerchantReport', 16, 1);
 end;
 
---2. Prepare Unusual Merchant list
-With CandidateUnusualMerchant as
-(
-	select
-		Trans.MerchantNo,
-		SUM(Trans.SucceedTransAmount) SumSucceedAmount
-	from
-		FactDailyTrans Trans
-		inner join
-		Table_MerInfo MerInfo
-		on
-			Trans.MerchantNo = MerInfo.MerchantNo
-	where
-		Trans.GateNo not in ('0044', '0045')
-		and
-		Trans.DailyTransDate >= dateadd(month, -1 * @MonthPeriod, convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01')
-		and
-		Trans.DailyTransDate < convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01'
-		and
-		Trans.MerchantNo not in (select MerchantNo from Table_FacilityMerchantRelation where FacilityNo = '000020100816001')
-		and
-		MerInfo.MerchantName not like '%基金管理%'
-	group by
-		Trans.MerchantNo
-)
-select top(@TopNum)
-	MerchantNo
-into
-	#UnusualMerchantList
-from
-	CandidateUnusualMerchant
-order by
-	SumSucceedAmount desc;
-
 --3. Prepare StartDate and EndDate
 declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
@@ -115,6 +81,74 @@ begin
     set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
     set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 end
+
+--2. Prepare Unusual Merchant list
+Create table #TempMerTrans 
+(
+	MerchantNo char(40) not null,
+	SumSucceedAmount bigint not null
+);
+
+if(@MonthPeriod <> 0)
+Begin
+	insert into #TempMerTrans
+	select
+		Trans.MerchantNo,
+		SUM(Trans.SucceedTransAmount) SumSucceedAmount
+	from
+		FactDailyTrans Trans
+		inner join
+		Table_MerInfo MerInfo
+		on
+			Trans.MerchantNo = MerInfo.MerchantNo
+	where
+		Trans.GateNo not in ('0044', '0045')
+		and
+		Trans.DailyTransDate >= dateadd(month, -1 * @MonthPeriod, convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01')
+		and
+		Trans.DailyTransDate < convert(char, YEAR(@StartDate)) + '-' + CONVERT(char, MONTH(@StartDate)) + '-01'
+		and
+		Trans.MerchantNo not in (select MerchantNo from Table_FacilityMerchantRelation where FacilityNo = '000020100816001')
+		and
+		MerInfo.MerchantName not like '%基金管理%'
+	group by
+		Trans.MerchantNo
+End
+else if(@MonthPeriod = 0)
+Begin
+	insert into #TempMerTrans
+	select
+		Trans.MerchantNo,
+		SUM(Trans.SucceedTransAmount) SumSucceedAmount
+	from
+		FactDailyTrans Trans
+		inner join
+		Table_MerInfo MerInfo
+		on
+			Trans.MerchantNo = MerInfo.MerchantNo
+	where
+		Trans.GateNo not in ('0044', '0045')
+		and
+		Trans.DailyTransDate >= @CurrStartDate
+		and
+		Trans.DailyTransDate <  @CurrEndDate
+		and
+		Trans.MerchantNo not in (select MerchantNo from Table_FacilityMerchantRelation where FacilityNo = '000020100816001')
+		and
+		MerInfo.MerchantName not like '%基金管理%'
+	group by
+		Trans.MerchantNo
+End
+
+select top(@TopNum)
+	MerchantNo
+into
+	#UnusualMerchantList
+from
+	#TempMerTrans
+order by
+	SumSucceedAmount DESC;
+
 
 --4. Get Current Period SucceedCount and SucceedAmount
 select
@@ -198,6 +232,7 @@ from
 		UnusualMerchant.MerchantNo = MerInfo.MerchantNo;
 		
 --8. Clear temp tables
+drop table #TempMerTrans;
 drop table #UnusualMerchantList;
 drop table #CurrSumValue;
 drop table #PrevSumValue;
