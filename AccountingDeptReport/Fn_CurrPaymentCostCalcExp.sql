@@ -67,7 +67,7 @@ begin
 				and
 				ByTrans.RefMaxAmt = @RefMaxAmt
 			then 
-				N'每笔成本' + convert(varchar, convert(decimal(10, 2), ByTrans.FeeValue/100)) + N'元'
+				N'每笔成本' + convert(varchar, convert(decimal(10, 3), ByTrans.FeeValue/100)) + N'元'
 			when
 				ByTrans.FeeType = 'Fixed'
 				and
@@ -83,7 +83,7 @@ begin
 					   else
 						   N'以上时，'
 				  end	
-					 + N'每笔成本' + convert(varchar, convert(decimal(10, 2), ByTrans.FeeValue/100)) + N'元'
+					 + N'每笔成本' + convert(varchar, convert(decimal(10, 3), ByTrans.FeeValue/100)) + N'元'
 			when 
 				ByTrans.FeeType = 'Percent'
 				and
@@ -91,7 +91,7 @@ begin
 				and
 				ByTrans.RefMaxAmt = @RefMaxAmt 
 			then
-				N'按金额的' + convert(varchar, convert(decimal(10, 2), ByTrans.FeeValue * 100)) + N'%收取成本' 
+				N'按金额的' + convert(varchar, convert(decimal(10, 3), ByTrans.FeeValue * 100)) + N'%收取成本' 
 			when
 				ByTrans.FeeType = 'Percent'
 				and
@@ -107,7 +107,7 @@ begin
 				else
 					N'以上时，'
 				end	
-				+ N'按金额的' + convert(varchar, convert(decimal(10, 2), ByTrans.FeeValue * 100)) + N'%收取成本'
+				+ N'按金额的' + convert(varchar, convert(decimal(10, 3), ByTrans.FeeValue * 100)) + N'%收取成本'
 			else
 				N''
 			end
@@ -149,7 +149,7 @@ begin
 				ByYear.RefMaxAmt = @RefMaxAmt
 			then
 				case when ByYear.GateGroup <> 0 then N'网关组' else N'' end
-				+ N'包年成本' + convert(varchar, convert(decimal(10, 2), ByYear.FeeValue/100)) + N'元'
+				+ N'包年成本' + convert(varchar, convert(decimal(10, 3), ByYear.FeeValue/100)) + N'元'
 			when
 				ByYear.FeeType = 'Fixed'
 				and
@@ -166,7 +166,7 @@ begin
 						   N'以上时，'
 				  end	
 				  + case when ByYear.GateGroup <> 0 then N'网关组' else N'' end			  
-				  + N'包年成本' + convert(varchar, convert(decimal(10, 2), ByYear.FeeValue/100)) + N'元'
+				  + N'包年成本' + convert(varchar, convert(decimal(10, 3), ByYear.FeeValue/100)) + N'元'
 			when 
 				ByYear.FeeType = 'Split'
 				and
@@ -174,7 +174,7 @@ begin
 				and
 				ByYear.RefMaxAmt = @RefMaxAmt 
 			then
-				N'手续费' + convert(varchar, convert(decimal(10, 2), ByYear.FeeValue * 100)) + N'%作为分润成本' 
+				N'手续费' + convert(varchar, convert(decimal(10, 3), ByYear.FeeValue * 100)) + N'%作为分润成本' 
 			when
 				ByYear.FeeType = 'Split'
 				and
@@ -190,7 +190,7 @@ begin
 				else
 					N'以上时，'
 				end	
-				+ N'手续费' + convert(varchar, convert(decimal(10, 2), ByYear.FeeValue * 100)) + N'%作为分润成本'
+				+ N'手续费' + convert(varchar, convert(decimal(10, 3), ByYear.FeeValue * 100)) + N'%作为分润成本'
 			else
 				N''
 			end
@@ -226,11 +226,11 @@ begin
 			case when 
 				ByMer.FeeType = 'Percent'
 			then
-				N'该网关下商户' + rtrim(ByMer.MerchantNo) + N'，按交易金额的' + convert(varchar, convert(decimal(10, 2), ByMer.FeeValue * 100)) + N'%收取成本' 
+				N'该网关下商户' + rtrim(ByMer.MerchantNo) + N'，按交易金额的' + convert(varchar, convert(decimal(10, 3), ByMer.FeeValue * 100)) + N'%收取成本' 
 			when
 				ByMer.FeeType = 'Fixed'
 			then
-				N'该网关下商户' + rtrim(ByMer.MerchantNo) + N'，每笔成本' + convert(varchar, convert(decimal(10, 2), ByMer.FeeValue/100)) + N'元'
+				N'该网关下商户' + rtrim(ByMer.MerchantNo) + N'，每笔成本' + convert(varchar, convert(decimal(10, 3), ByMer.FeeValue/100)) + N'元'
 			else
 				N''
 			end
