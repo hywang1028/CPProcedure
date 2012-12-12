@@ -5,7 +5,7 @@ end
 go
 
 create procedure Proc_Query2012UnionPayEmallTransReport
-	@StartDate datetime = '2012-01-01',
+	@StartDate datetime = '2012-06-01',
 	@PeriodUnit nchar(4) = N'ÔÂ',
 	@EndDate datetime = '2012-02-01'
 as
@@ -99,7 +99,7 @@ from
 	inner join
 	Table_BranchOfficeNameRule BranchOffice
 	on
-		Emall.City = BranchOffice.BranchOfficeShortName
+		RTRIM(LTRIM(Emall.City)) = BranchOffice.BranchOfficeShortName
 where
 	Emall.DestBranchOffice = N''
 	and
@@ -114,7 +114,7 @@ from
 	inner join 
 	Table_BranchOfficeNameRule BranchOffice
 	on
-		Emall.Province = BranchOffice.BranchOfficeShortName
+		RTRIM(LTRIM(Emall.Province)) = BranchOffice.BranchOfficeShortName
 where
 	Emall.DestBranchOffice = N''
 	and

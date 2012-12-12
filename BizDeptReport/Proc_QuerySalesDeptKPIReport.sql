@@ -1,5 +1,6 @@
 --[Created] At 20120604 By 王红燕:销售考核报表(境外数据已转为人民币数据)
 --[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
+--[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 if OBJECT_ID(N'Proc_QuerySalesDeptKPIReport', N'P') is not null
 begin
 	drop procedure Proc_QuerySalesDeptKPIReport;
@@ -23,6 +24,8 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
+declare @HisRefDate datetime;
+set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
 --set @CurrStartDate = '2012-01-01';
 --set @CurrEndDate = '2012-03-01';
 --3. Prepare Trans Data
@@ -42,7 +45,7 @@ create table #ProcPayCost
 insert into 
 	#ProcPayCost
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,@HisRefDate,'on';
 
 select 
 	MerchantNo,
@@ -123,7 +126,7 @@ create table #ProcOraCost
 insert into 
 	#ProcOraCost
 exec 
-	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
+	Proc_CalOraCost @CurrStartDate,@CurrEndDate,@HisRefDate;
 	
 With OraFee as
 (
@@ -177,7 +180,7 @@ set
 from
 	#OraAllData Ora
 	inner join
-	Table_OraOrdinaryMerRate MerRate
+	Table_OraAdditionalFeeRule MerRate
 	on
 		Ora.MerchantNo = MerRate.MerchantNo;
 
@@ -220,9 +223,9 @@ With WUTransData as
 	from
 		Table_WUTransLog
 	where
-		CPDate >= @StartDate
+		CPDate >= @CurrStartDate
 		and
-		CPDate <  @EndDate
+		CPDate <  @CurrEndDate
 	group by
 		MerchantNo
 ),

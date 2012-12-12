@@ -135,7 +135,7 @@ group by
 
 --6. Get Total SucceedCount
 select
-	GateRoute.BankName,
+	ISNULL(GateCategory.BankName,N'ÆäËü') BankName,
 	GateRoute.GateNo,
 	ISNULL(CurrCount.CurrSucceedCount, 0) CurrSucceedCount,
 	ISNULL(CurrCount.CurrTotalCount, 0) CurrTotalCount,
@@ -149,7 +149,11 @@ select
 into
 	#TotalCount
 from
-	Table_GateCategory GateRoute 
+	Table_GateRoute GateRoute
+	left join
+	Table_GateCategory GateCategory
+	on
+		GateRoute.GateNo = GateCategory.GateNo 
 	left join
 	#CurrCount CurrCount
 	on

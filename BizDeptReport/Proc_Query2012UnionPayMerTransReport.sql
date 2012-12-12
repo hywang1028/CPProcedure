@@ -1,3 +1,4 @@
+--[Modified] at 2012-07-13 by 王红燕  Description:Add Financial Dept Configuration Data
 if OBJECT_ID(N'Proc_Query2012UnionPayMerTransReport', N'P') is not null
 begin
 	drop procedure Proc_Query2012UnionPayMerTransReport;
@@ -261,7 +262,7 @@ from
 		
 --3.2 Prepare Configuration Data
 --3.2.1 Prepare BranchOffice
-With UnionUMSChannel as
+With SalesUnionUMSChannel as
 (
 	select
 		coalesce(UnionPay.UnionPaySpec, Sales.BranchOffice) BranchOffice,
@@ -277,7 +278,7 @@ With UnionUMSChannel as
 	where
 		Sales.Channel in (N'银联', N'银商') 
 ),
-OtherChannel as
+SalesOtherChannel as
 (
 	select
 		coalesce(BranchOffice.UnionPaySpec,Sales.Area) as BranchOffice,
@@ -299,10 +300,71 @@ OtherChannel as
 			Sales.Area = BranchOffice.BranchOfficeShortName 
 	where 
 		Sales.Channel not in (N'银联',N'银商')
+),
+SalesDeptConfig as
+(
+	select * from SalesUnionUMSChannel
+	union all
+	select * from SalesOtherChannel
+),
+FinanceUnionUMSChannel as
+(
+	select
+		coalesce(UnionPay.UnionPaySpec, Finance.BranchOffice) BranchOffice,
+		NULL as MerchantName,
+		Finance.MerchantNo,
+		Finance.IndustryName
+	from
+		Table_FinancialDeptConfiguration Finance
+		left join
+		Table_BranchOfficeNameRule UnionPay
+		on
+			Finance.BranchOffice = UnionPay.UnnormalBranchOfficeName
+	where
+		Finance.Channel in (N'银联', N'银商') 
+),
+FinanceOtherChannel as
+(
+	select
+		coalesce(BranchOffice.UnionPaySpec,Finance.Area) as BranchOffice,
+		NULL as MerchantName,
+		Finance.MerchantNo,
+		Finance.IndustryName
+	from 
+		Table_FinancialDeptConfiguration Finance 
+		left join 
+		(select distinct 
+			BranchOfficeShortName,
+			UnionPaySpec 
+		from 
+			Table_BranchOfficeNameRule 
+		where 
+			BranchOfficeShortName is not null
+		)BranchOffice 
+		on 
+			Finance.Area = BranchOffice.BranchOfficeShortName 
+	where 
+		Finance.Channel not in (N'银联',N'银商')
+),
+FinanceDeptConfig as
+(
+	select * from FinanceUnionUMSChannel
+	union all
+	select * from FinanceOtherChannel
 )
-select * into #AllBranchOffice from UnionUMSChannel
-union 
-select * from OtherChannel;
+select
+	coalesce(Sales.BranchOffice,Finance.BranchOffice) BranchOffice,
+	coalesce(Sales.MerchantName,Finance.MerchantName) MerchantName,
+	coalesce(Sales.MerchantNo,Finance.MerchantNo) MerchantNo,
+	coalesce(Sales.IndustryName,Finance.IndustryName) IndustryName
+into
+	#AllBranchOffice
+from
+	SalesDeptConfig Sales
+	full outer join
+	FinanceDeptConfig Finance
+	on
+		Sales.MerchantNo = Finance.MerchantNo;
 
 --3.2.2 Join All Mer Trans
 select

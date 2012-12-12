@@ -1,3 +1,4 @@
+--[Modified] at 2012-07-13 by Õı∫Ï—‡  Description:Add Financial Dept Configuration Data
 if OBJECT_ID(N'Proc_QueryUnionMerTransSum',N'P') is not null
 begin
 	drop procedure Proc_QueryUnionMerTransSum;
@@ -48,6 +49,7 @@ end
 --3.Get SpecifiedTimePeriod Data
 select
 	MerchantNo,
+	(select MerchantName from Table_OraMerchants where MerchantNo = Table_OraTransSum.MerchantNo) MerchantName,
 	sum(TransCount) TransCount,
 	sum(TransAmount) TransAmount
 into
@@ -63,6 +65,7 @@ group by
 	
 select 
 	MerchantNo,
+	(select MerchantName from Table_MerInfo where MerchantNo = FactDailyTrans.MerchantNo) MerchantName,
 	sum(SucceedTransCount) SucceedTransCount,
 	sum(SucceedTransAmount) SucceedTransAmount
 into
@@ -102,7 +105,6 @@ group by
 
 --4. Get table Merchant With BranchOffice
 select
-	SalesDeptConfiguration.MerchantName,
 	SalesDeptConfiguration.MerchantNo
 into
 	#MerWithBranchOffice
@@ -113,12 +115,23 @@ from
 	on
 		BranchOfficeNameRule.UnnormalBranchOfficeName = SalesDeptConfiguration.BranchOffice
 where 
+	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName
+union 
+select
+	Finance.MerchantNo
+from
+	Table_BranchOfficeNameRule BranchOfficeNameRule 
+	inner join
+	Table_FinancialDeptConfiguration Finance
+	on
+		BranchOfficeNameRule.UnnormalBranchOfficeName = Finance.BranchOffice
+where 
 	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName;
 	
 	
 --5. Get TransDetail respectively
 select
-	MerWithBranchOffice.MerchantName,
+	OraTransSum.MerchantName,
 	OraTransSum.MerchantNo,
 	OraTransSum.TransCount,
 	OraTransSum.TransAmount
@@ -132,7 +145,7 @@ from
 		OraTransSum.MerchantNo = MerWithBranchOffice.MerchantNo;
 	
 select
-	MerWithBranchOffice.MerchantName,
+	FactDailyTrans.MerchantName,
 	FactDailyTrans.MerchantNo,
 	FactDailyTrans.SucceedTransCount as TransCount,
 	FactDailyTrans.SucceedTransAmount as TransAmount
