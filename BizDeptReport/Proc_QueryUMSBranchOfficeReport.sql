@@ -1,12 +1,12 @@
-IF OBJECT_ID(N'Proc_QueryUMSBranchOfficeAutomationReportNameInforAmtCntFinalAmt',N'p') is not null
+IF OBJECT_ID(N'Proc_QueryUMSBranchOfficeReport',N'p') is not null
 begin
-	drop procedure Proc_QueryUMSBranchOfficeAutomationReportNameInforAmtCntFinalAmt
+	drop procedure Proc_QueryUMSBranchOfficeReport
 end
 go
 
-create procedure Proc_QueryUMSBranchOfficeAutomationReportNameInforAmtCntFinalAmt
+create procedure Proc_QueryUMSBranchOfficeReport
 	@StartDate datetime = '2012-10-22',
-	@BranchName Nvarchar(35) = N'银联商务有限公司江苏分公司'
+	@BranchOfficeName Nvarchar(35) = N'银联商务有限公司江苏分公司'
 
 
 as  
@@ -20,9 +20,9 @@ set @CurrEndDate = DATEADD(MONTH,1,@CurrStartDate);
 set @ThisYearStartDate = CONVERT(char(4),YEAR(@CurrStartDate)) + '-01-01';
 
 --1. Check input  
-if (@StartDate is null or @BranchName is null)  
+if (@StartDate is null or @BranchOfficeName is null)  
 begin  
-	raiserror(N'Input params cannot be empty in Proc_QueryUMSBranchOfficeAutomationReportNameInforAmtCntFinalAmt', 16, 1)  
+	raiserror(N'Input params cannot be empty in Proc_QueryUMSBranchOfficeReport', 16, 1)  
 end  
 
 
@@ -47,7 +47,7 @@ select
 		from 
 			Table_UMSBranchRptDetailConfig 
 		where 
-			BranchOfficeName = @BranchName
+			BranchOfficeName = @BranchOfficeName
 			and
 			MonthDate >= @ThisYearStartDate
 			and 
@@ -66,7 +66,7 @@ select
 from
 	Table_UMSBranchRptDetailConfig UMS
 where
-	BranchOfficeName = @BranchName
+	BranchOfficeName = @BranchOfficeName
 	and
 	MonthDate >= @CurrStartDate
 	and

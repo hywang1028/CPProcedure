@@ -6,9 +6,9 @@ end
 go
 
 Create Procedure Proc_QueryNewlyIncreasedMerWithBranchOffice
-	@StartDate datetime = '2011-03-01',
-	@PeriodUnit nChar(3) = N'自定义',
-	@EndDate datetime = '2011-04-30',
+	@StartDate datetime = '2012-10-22',
+	@PeriodUnit nChar(3) = N'月',
+	@EndDate datetime = '2012-12-30',
 	@BranchOfficeName nChar(15) = N'银联商务有限公司安徽分公司'
 as 
 begin
