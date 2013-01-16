@@ -22,21 +22,21 @@ select
 	then (case when ByTrans.FeeType = 'Fixed' 
 			then N'固定按每笔' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.FeeValue/100))) + N'元计算成本'
 			when ByTrans.FeeType = 'Percent'
-			then N'固定按金额的' + RTrim(Convert(char,Convert(decimal(15,2),100*ByTrans.FeeValue))) + N'%计算成本' End)
+			then N'固定按金额的' + RTrim(Convert(char,Convert(decimal(15,3),100*ByTrans.FeeValue))) + N'%计算成本' End)
 	when ByTrans.RefMinAmt = 0 and ByTrans.RefMaxAmt <> @MAX
 	then (case when ByTrans.FeeType = 'Fixed' 
 			then N'每笔交易额在' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMaxAmt/100))) + N'元以下的按每笔' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.FeeValue/100))) + N'元计算成本'
 			when ByTrans.FeeType = 'Percent'
-			then N'每笔交易额在' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMaxAmt/100))) + N'元以下的按交易金额的' + RTrim(Convert(char,Convert(Decimal(15,2),100*ByTrans.FeeValue))) + N'%计算成本' End)
+			then N'每笔交易额在' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMaxAmt/100))) + N'元以下的按交易金额的' + RTrim(Convert(char,Convert(Decimal(15,3),100*ByTrans.FeeValue))) + N'%计算成本' End)
 	when ByTrans.RefMinAmt <> 0 and ByTrans.RefMaxAmt = @MAX
 	then (case when ByTrans.FeeType = 'Fixed' 
 			then N'每笔交易额在' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMinAmt/100))) + N'元以上的按每笔' + RTrim(Convert(char,Convert(Decimal,ByTrans.FeeValue/100))) + N'元计算成本'
 			when ByTrans.FeeType = 'Percent'
-			then N'每笔交易额在' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMinAmt/100))) + N'元以上的按交易金额的' + RTrim(Convert(char,Convert(Decimal(15,2),100*ByTrans.FeeValue))) + N'%计算成本' End)
+			then N'每笔交易额在' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMinAmt/100))) + N'元以上的按交易金额的' + RTrim(Convert(char,Convert(Decimal(15,3),100*ByTrans.FeeValue))) + N'%计算成本' End)
 	else (case when ByTrans.FeeType = 'Fixed'
 			then N'每笔交易额在'+ RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMinAmt/100))) + N'元至' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMaxAmt/100))) + N'元，按每笔' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.FeeValue/100))) + N'元计算成本'
 			when ByTrans.FeeType = 'Percent'
-			then N'每笔交易额在'+ RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMinAmt/100))) + N'元至' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMaxAmt/100))) + N'元，按交易金额的' + RTrim(Convert(char,Convert(Decimal(15,2),100*ByTrans.FeeValue))) + N'%计算成本' End)
+			then N'每笔交易额在'+ RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMinAmt/100))) + N'元至' + RTrim(Convert(char,Convert(Decimal(15,2),ByTrans.RefMaxAmt/100))) + N'元，按交易金额的' + RTrim(Convert(char,Convert(Decimal(15,3),100*ByTrans.FeeValue))) + N'%计算成本' End)
 	End as GateDescrip
 into
 	#ByTransData
