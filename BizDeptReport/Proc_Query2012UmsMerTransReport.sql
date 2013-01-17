@@ -4,16 +4,17 @@
 --Modified By 王红燕 2012-04-09 修改原因:将商户开户日期的口径改使用吴迪给出数据
 --[Modified] at 2012-07-13 by 王红燕  Description:Add Financial Dept Configuration Data
 --[Modified] at 2012-09-07 by 王红燕  Description:根据用户的报表变更需求变更
+--[Modified] at 2012-12-13 by 王红燕  Description:Add Branch Office Fund Trans Data
 if OBJECT_ID(N'Proc_Query2012UmsMerTransReport', N'P') is not null
 begin
 	drop procedure Proc_Query2012UmsMerTransReport;
 end
 go
-
+--总交易量
 create procedure Proc_Query2012UmsMerTransReport
-	@StartDate datetime = '2012-01-01',
+	@StartDate datetime = '2012-11-01',
 	@PeriodUnit nchar(4) = N'月',
-	@EndDate datetime = '2012-02-01',
+	@EndDate datetime = '2012-12-01',
 	@TransType nchar(10) = N'总交易量'
 as
 begin
@@ -273,7 +274,9 @@ select
 	EmallTransSum.TransCnt/10000.0 as EmallTransCnt,
 	EmallTransSum.TransAmt/1000000.0 as EmallTransAmt,
 	0 as ORATransCnt,
-	0 as ORATransAmt
+	0 as ORATransAmt,
+	0 as FundTransCnt,
+	0 as FundTransAmt
 into
 	#EmallTransData
 from
@@ -482,7 +485,9 @@ select
 	0 as EmallTransCnt,
 	0 as EmallTransAmt,
 	case when @TransType = N'总交易量' then ISNULL(AllTransData.ORATransCnt,0)/10000.0 Else 0 End as ORATransCnt,
-	case when @TransType = N'总交易量' then ISNULL(AllTransData.ORATransAmt,0)/1000000.0 Else 0 End as ORATransAmt
+	case when @TransType = N'总交易量' then ISNULL(AllTransData.ORATransAmt,0)/1000000.0 Else 0 End as ORATransAmt,
+	0 as FundTransCnt,
+	0 as FundTransAmt
 into
 	#Result
 from
@@ -500,13 +505,92 @@ if(@TransType = N'B2B' or @TransType = 'UPOP')
 begin
     select * from #Result order by OrderID,BranchOffice;
 end
-else if(@TransType = N'总交易量' or @TransType = N'B2C(除UPOP)')
+else if(@TransType = N'B2C(除UPOP)')
 begin
 	select * from #Result
 	union all
 	select * from #EmallTransData
 	order by OrderID,BranchOffice;	
 End
+else if(@TransType = N'总交易量')
+begin
+	select * from #Result
+	union all
+	select * from #EmallTransData
+	union all
+	select 
+		BranchOfficeNameRule.NormalBranchOfficeName BranchOffice,
+		0 as OrderID,
+		N'' as MerchantNo,
+		N'' as MerchantName,
+		N'' as MerchantType,
+		N'' as OpenTime,
+		0 as PayTransCnt,
+		0 as PayTransAmt,
+		0 as EPOSTransCnt,
+		0 as EPOSTransAmt,
+		0 as DeductTransCnt,
+		0 as DeductTransAmt,
+		0 as ConvenienceTransCnt,
+		0 as ConvenienceTransAmt,
+		0 as EmallTransCnt,
+		0 as EmallTransAmt,
+		0 as ORATransCnt,
+		0 as ORATransAmt,
+		SUM(Branch.B2BPurchaseCnt+Branch.B2BRedemptoryCnt+Branch.B2CPurchaseCnt+Branch.B2CRedemptoryCnt)/10000.0 FundTransCnt,
+		SUM(Branch.B2BPurchaseAmt+Branch.B2BRedemptoryAmt+Branch.B2CPurchaseAmt+Branch.B2CRedemptoryAmt)/1000000.0 FundTransAmt
+	from 
+		Table_UMSBranchFundTrans Branch
+		inner join
+		Table_BranchOfficeNameRule BranchOfficeNameRule
+		on
+			Branch.BranchOfficeName = BranchOfficeNameRule.UnnormalBranchOfficeName
+	where	
+		Branch.TransDate >= @CurrStartDate
+		and
+		Branch.TransDate <  @CurrEndDate
+	group by
+		BranchOfficeNameRule.NormalBranchOfficeName
+	order by 
+		OrderID,
+		BranchOffice;	
+end
+else if(@TransType = N'其它')
+begin
+	select 
+		BranchOfficeNameRule.NormalBranchOfficeName BranchOffice,
+		0 as OrderID,
+		N'' as MerchantNo,
+		N'' as MerchantName,
+		N'' as MerchantType,
+		N'' as OpenTime,
+		0 as PayTransCnt,
+		0 as PayTransAmt,
+		0 as EPOSTransCnt,
+		0 as EPOSTransAmt,
+		0 as DeductTransCnt,
+		0 as DeductTransAmt,
+		0 as ConvenienceTransCnt,
+		0 as ConvenienceTransAmt,
+		0 as EmallTransCnt,
+		0 as EmallTransAmt,
+		0 as ORATransCnt,
+		0 as ORATransAmt,
+		SUM(Branch.B2BPurchaseCnt+Branch.B2BRedemptoryCnt+Branch.B2CPurchaseCnt+Branch.B2CRedemptoryCnt)/10000.0 FundTransCnt,
+		SUM(Branch.B2BPurchaseAmt+Branch.B2BRedemptoryAmt+Branch.B2CPurchaseAmt+Branch.B2CRedemptoryAmt)/1000000.0 FundTransAmt
+	from 
+		Table_UMSBranchFundTrans Branch
+		inner join
+		Table_BranchOfficeNameRule BranchOfficeNameRule
+		on
+			Branch.BranchOfficeName = BranchOfficeNameRule.UnnormalBranchOfficeName
+	where	
+		Branch.TransDate >= @CurrStartDate
+		and
+		Branch.TransDate <  @CurrEndDate
+	group by
+		BranchOfficeNameRule.NormalBranchOfficeName;	
+end
 
 --4. Drop Table
 Drop table #GateNo;
