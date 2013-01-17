@@ -1,4 +1,5 @@
 --[Modified] at 2012-07-13 by 王红燕  Description:Add Financial Dept Configuration Data
+--[Modified] at 2012-12-13 by 王红燕  Description:Add Branch Office Fund Trans Data
 if OBJECT_ID(N'Proc_QueryMerTransSumWithBranchOffice',N'P') is not null
 begin
 	drop procedure Proc_QueryMerTransSumWithBranchOffice;
@@ -6,10 +7,10 @@ end
 go
 
 Create Procedure Proc_QueryMerTransSumWithBranchOffice
-	@StartDate datetime = '2012-02-01',
-	@PeriodUnit nChar(3) = N'自定义',
-	@EndDate datetime = '2012-07-29',
-	@BranchOfficeName nChar(15) = N'银联商务有限公司新疆分公司'
+	@StartDate datetime = '2012-11-01',
+	@PeriodUnit nChar(4) = N'自定义',
+	@EndDate datetime = '2012-11-29',
+	@BranchOfficeName nChar(15) = N'北京银联商务有限公司'
 as 
 begin
 
@@ -102,6 +103,26 @@ group by
 	EmallTransSum.MerchantNo,
 	EmallTransSum.MerchantName;
 
+--Add Branch Office Fund Trans Data
+select 
+	N'' as MerchantNo,
+	N'基金' as MerchantName,
+	SUM(Branch.B2BPurchaseCnt+Branch.B2BRedemptoryCnt+Branch.B2CPurchaseCnt+Branch.B2CRedemptoryCnt) TransCount,
+	SUM(Branch.B2BPurchaseAmt+Branch.B2BRedemptoryAmt+Branch.B2CPurchaseAmt+Branch.B2CRedemptoryAmt) TransAmount
+into
+	#BranchFundTrans
+from 
+	Table_UMSBranchFundTrans Branch
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		Branch.BranchOfficeName = BranchOfficeNameRule.UnnormalBranchOfficeName
+where	
+	Branch.TransDate >= @CurrStartDate
+	and
+	Branch.TransDate <  @CurrEndDate
+	and
+	BranchOfficeNameRule.NormalBranchOfficeName = @BranchOfficeName;
 
 --4. Get table MerWithBranchOffice
 select
@@ -162,8 +183,8 @@ from
 select
 	MerchantName,
 	MerchantNo,
-	TransCount,
-	convert(decimal, TransAmount)/100.0 TransAmount
+	ISNULL(TransCount,0) TransCount,
+	convert(decimal, ISNULL(TransAmount,0))/100.0 TransAmount
 into
 	#AllTransSum
 from
@@ -189,7 +210,15 @@ from
 		TransCount,
 		TransAmount
 	from
-		#EmallTransSum) Mer; 
+		#EmallTransSum
+	union all 
+	select
+		MerchantName,
+		MerchantNo,
+		TransCount,
+		TransAmount
+	from
+		#BranchFundTrans) Mer; 
 	
 	
 --7. Get Special MerchantNo
@@ -248,6 +277,7 @@ drop table #OraTransWithBO;
 drop table #FactDailyTransWithBO;
 drop table #AllTransSum;
 drop table #SpecMerchantNo;
+drop table #BranchFundTrans;
 
 end
 

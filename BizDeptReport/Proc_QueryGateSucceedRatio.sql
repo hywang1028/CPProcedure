@@ -8,7 +8,6 @@ go
 create procedure Proc_QueryGateSucceedRatio
 	@StartDate datetime = '2011-08-30',
 	@PeriodUnit nchar(4)= N'自定义',
-	@ReportCategory as nvarchar(4) = N'汇总',
 	@EndDate datetime = '2011-9-30'
 as
 begin
@@ -135,7 +134,7 @@ group by
 
 --6. Get Total SucceedCount
 select
-	ISNULL(GateCategory.BankName,N'其它') BankName,
+	ISNULL(GateRoute.GateDesc,N'其它') BankName,
 	GateRoute.GateNo,
 	ISNULL(CurrCount.CurrSucceedCount, 0) CurrSucceedCount,
 	ISNULL(CurrCount.CurrTotalCount, 0) CurrTotalCount,
@@ -214,8 +213,8 @@ from
 	#TotalCount;
 
 --8. Get Result
-if (@ReportCategory = N'明细')
-begin 
+--if (@ReportCategory = N'明细')
+--begin 
 	select
 		BankName,
 		GateNo,
@@ -246,88 +245,90 @@ begin
 		CurrSucceedRatio - LastYearSucceedRatio as SucceedYOYIncrease,
 		CurrFailedRatio - LastYearFailedRatio as FailedYOYIncrease
 	from
-		#TotalRatio;	
-end
-else if (@ReportCategory = N'汇总')
-begin
-	select
-		BankName,
-		SUM(CurrSucceedCount) CurrSucceedCount,
-		SUM(CurrTotalCount) CurrTotalCount,
-		SUM(CurrFailedCount) CurrFailedCount,
-		
-		SUM(PrevSucceedCount) PrevSucceedCount,
-		SUM(PrevTotalCount) PrevTotalCount,
-		SUM(PrevFailedCount) PrevFailedCount,
-		
-		SUM(LastYearSucceedCount) LastYearSucceedCount,
-		SUM(LastYearTotalCount) LastYearTotalCount,
-		SUM(LastYearFailedCount) LastYearFailedCount,
-		
-		case when SUM(CurrTotalCount) = 0
-			then null
-			else CONVERT(decimal, SUM(CurrSucceedCount)) / SUM(CurrTotalCount)
-		end as CurrSucceedRatio,
-		case when SUM(CurrTotalCount) = 0
-			then null
-			else CONVERT(decimal, SUM(CurrFailedCount)) / SUM(CurrTotalCount)
-		end as CurrFailedRatio,
-		case when SUM(PrevTotalCount) = 0
-			then null
-			else CONVERT(decimal, SUM(PrevSucceedCount)) / SUM(PrevTotalCount)
-		end as PrevSucceedRatio,
-		case when SUM(PrevTotalCount) = 0
-			then null
-			else CONVERT(decimal, SUM(PrevFailedCount)) / SUM(PrevTotalCount)
-		end as PrevFailedRatio,
-		case when SUM(LastYearTotalCount) = 0
-			then null
-			else CONVERT(decimal, SUM(LastYearSucceedCount)) / SUM(LastYearTotalCount)
-		end as LastYearSucceedRatio,
-		case when SUM(LastYearTotalCount) = 0
-			then null
-			else CONVERT(decimal, SUM(LastYearFailedCount)) / SUM(LastYearTotalCount)
-		end as LastYearFailedRatio	
-	INTO
-		#TempTotalRatio
-	from
 		#TotalRatio
-	group by 
-		BankName;
+	order by
+		GateNo;	
+--end
+--else if (@ReportCategory = N'汇总')
+--begin
+--	select
+--		BankName,
+--		SUM(CurrSucceedCount) CurrSucceedCount,
+--		SUM(CurrTotalCount) CurrTotalCount,
+--		SUM(CurrFailedCount) CurrFailedCount,
+		
+--		SUM(PrevSucceedCount) PrevSucceedCount,
+--		SUM(PrevTotalCount) PrevTotalCount,
+--		SUM(PrevFailedCount) PrevFailedCount,
+		
+--		SUM(LastYearSucceedCount) LastYearSucceedCount,
+--		SUM(LastYearTotalCount) LastYearTotalCount,
+--		SUM(LastYearFailedCount) LastYearFailedCount,
+		
+--		case when SUM(CurrTotalCount) = 0
+--			then null
+--			else CONVERT(decimal, SUM(CurrSucceedCount)) / SUM(CurrTotalCount)
+--		end as CurrSucceedRatio,
+--		case when SUM(CurrTotalCount) = 0
+--			then null
+--			else CONVERT(decimal, SUM(CurrFailedCount)) / SUM(CurrTotalCount)
+--		end as CurrFailedRatio,
+--		case when SUM(PrevTotalCount) = 0
+--			then null
+--			else CONVERT(decimal, SUM(PrevSucceedCount)) / SUM(PrevTotalCount)
+--		end as PrevSucceedRatio,
+--		case when SUM(PrevTotalCount) = 0
+--			then null
+--			else CONVERT(decimal, SUM(PrevFailedCount)) / SUM(PrevTotalCount)
+--		end as PrevFailedRatio,
+--		case when SUM(LastYearTotalCount) = 0
+--			then null
+--			else CONVERT(decimal, SUM(LastYearSucceedCount)) / SUM(LastYearTotalCount)
+--		end as LastYearSucceedRatio,
+--		case when SUM(LastYearTotalCount) = 0
+--			then null
+--			else CONVERT(decimal, SUM(LastYearFailedCount)) / SUM(LastYearTotalCount)
+--		end as LastYearFailedRatio	
+--	INTO
+--		#TempTotalRatio
+--	from
+--		#TotalRatio
+--	group by 
+--		BankName;
 	
-	select
-		BankName,
-		'0' as GateNo,
-		CurrSucceedCount,
-		CurrTotalCount,
-		CurrFailedCount,
+--	select
+--		BankName,
+--		'0' as GateNo,
+--		CurrSucceedCount,
+--		CurrTotalCount,
+--		CurrFailedCount,
 		
-		PrevSucceedCount,
-		PrevTotalCount,
-		PrevFailedCount,
+--		PrevSucceedCount,
+--		PrevTotalCount,
+--		PrevFailedCount,
 		
-		LastYearSucceedCount,
-		LastYearTotalCount,
-		LastYearFailedCount,
+--		LastYearSucceedCount,
+--		LastYearTotalCount,
+--		LastYearFailedCount,
 		
-		CurrSucceedRatio,
-		CurrFailedRatio,
+--		CurrSucceedRatio,
+--		CurrFailedRatio,
 		
-		PrevSucceedRatio,
-		PrevFailedRatio,
+--		PrevSucceedRatio,
+--		PrevFailedRatio,
 		
-		LastYearSucceedRatio,
-		LastYearFailedRatio,
+--		LastYearSucceedRatio,
+--		LastYearFailedRatio,
 		
-		CurrSucceedRatio - PrevSucceedRatio as SucceedSeqIncrease,
-		CurrFailedRatio - PrevFailedRatio as FailedSeqIncrease,
+--		CurrSucceedRatio - PrevSucceedRatio as SucceedSeqIncrease,
+--		CurrFailedRatio - PrevFailedRatio as FailedSeqIncrease,
 
 		
-		CurrSucceedRatio - LastYearSucceedRatio as SucceedYOYIncrease,
-		CurrFailedRatio - LastYearFailedRatio as FailedYOYIncrease
-	from
-		#TempTotalRatio;			
-end
+--		CurrSucceedRatio - LastYearSucceedRatio as SucceedYOYIncrease,
+--		CurrFailedRatio - LastYearFailedRatio as FailedYOYIncrease
+--	from
+--		#TempTotalRatio;			
+--end
 --9. Clear temp table
 drop table #TotalRatio;
 drop table #TotalCount;
