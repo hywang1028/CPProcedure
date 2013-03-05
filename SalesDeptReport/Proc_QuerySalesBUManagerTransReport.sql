@@ -1,4 +1,5 @@
 --[Modified] on 2012-06-08 By 王红燕 Description:Add West Union Trans Data
+--[Modified] on 2013-03-05 By 王红燕 Description:Modify Channel Info 
 if OBJECT_ID(N'Proc_QuerySalesBUManagerTransReport', N'P') is not null
 begin
 	drop procedure Proc_QuerySalesBUManagerTransReport;
@@ -380,7 +381,7 @@ from
 select
 	ISNULL(BUData.BizUnit,N'市场销售部') BizUnit,
 	ISNULL(Sales.SalesManager,N'') SalesManager,
-	ISNULL(Sales.Channel,N'') Channel,
+	ISNULL(Sales.MerchantClass,N'') Channel,
 	ISNULL(Sales.BranchOffice,N'') BranchOffice,
 	Sales.MerchantName,
 	Sales.MerchantNo,
@@ -433,7 +434,7 @@ from
 group by
 	BUData.BizUnit,
 	Sales.SalesManager,
-	Sales.Channel,
+	Sales.MerchantClass,
 	Sales.BranchOffice,
 	Sales.MerchantName,
 	Sales.MerchantNo;

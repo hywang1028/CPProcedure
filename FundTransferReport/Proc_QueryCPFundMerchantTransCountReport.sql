@@ -86,71 +86,128 @@ set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01
 set @ThisYearRunningEndDate = @CurrEndDate;
 
 --3. Get Current Data
+With CurrFundTrans as
+(
+	select
+		MerchantNo,
+		TransType,
+		COUNT(TransAmt) TransCnt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @CurrStartDate
+		and
+		TransDate <  @CurrEndDate
+		and
+		TransType in ('1010','3010','3020','3030','3040','3050')
+	group by
+		MerchantNo,
+		TransType
+)
 select
 	MerchantNo,
-	SUM(isnull(RegisterCount,0)) as RegisterCount,
-	SUM(isnull(PurchaseCount,0)) as PurchaseCount,
-	SUM(isnull(RetractCount,0)) as RetractCount,
-	SUM(isnull(DividendCount,0)) as DividendCount,
-	SUM(isnull(RedemptoryCount,0)) as RedemptoryCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	SUM(case when TransType = '1010' then TransCnt End) RegisterCount,	
+	SUM(case when TransType = '3010' then TransCnt End) PurchaseCount,	
+	SUM(case when TransType = '3020' then TransCnt End) RetractCount,		
+	SUM(case when TransType = '3030' then TransCnt End) RedemptoryCount,	
+	SUM(case when TransType = '3040' then TransCnt End) DividendCount,	
+	SUM(case when TransType = '3050' then TransCnt End) RegularCount,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#CurrData
+	#CurrData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @CurrStartDate
-	and
-	TransDate < @CurrEndDate
+	CurrFundTrans
 group by
 	MerchantNo;
 	
 --4. Get Previous Data
+With PrevFundTrans as
+(
+	select
+		MerchantNo,
+		TransType,
+		COUNT(TransAmt) TransCnt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @PrevStartDate
+		and
+		TransDate <  @PrevEndDate
+		and
+		TransType in ('3010','3020','3030','3040','3050')
+	group by
+		MerchantNo,
+		TransType
+)
 select
-	MerchantNo,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	MerchantNo,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#PrevData
+	#PrevData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @PrevStartDate
-	and
-	TransDate < @PrevEndDate
+	PrevFundTrans
 group by
 	MerchantNo;
 
 --5. Get LastYear Data
+With LastYearFundTrans as
+(
+	select
+		MerchantNo,
+		TransType,
+		COUNT(TransAmt) TransCnt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @LastYearStartDate
+		and
+		TransDate <  @LastYearEndDate
+		and
+		TransType in ('3010','3020','3030','3040','3050')
+	group by
+		MerchantNo,
+		TransType
+)
 select
-	MerchantNo,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	MerchantNo,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#LastYearData
+	#LastYearData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @LastYearStartDate
-	and
-	TransDate < @LastYearEndDate
+	LastYearFundTrans
 group by
 	MerchantNo;
 	
 --6. Get ThisYearRunning Data
+With ThisYearFundTrans as
+(
+	select
+		MerchantNo,
+		TransType,
+		COUNT(TransAmt) TransCnt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @ThisYearRunningStartDate
+		and
+		TransDate <  @ThisYearRunningEndDate
+		and
+		TransType in ('3010','3020','3030','3040','3050')
+	group by
+		MerchantNo,
+		TransType
+)
 select
-	MerchantNo,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	MerchantNo,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#ThisYearRunningData
+	#ThisYearRunningData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @ThisYearRunningStartDate
-	and
-	TransDate < @ThisYearRunningEndDate
+	ThisYearFundTrans
 group by
 	MerchantNo;
 
@@ -160,8 +217,9 @@ select
 	Curr.RegisterCount,
 	CONVERT(decimal,Curr.PurchaseCount)/10000 PurchaseCount,
 	CONVERT(decimal,Curr.RetractCount)/10000 RetractCount,
-	CONVERT(decimal,Curr.DividendCount)/10000 DividendCount,
 	CONVERT(decimal,Curr.RedemptoryCount)/10000 RedemptoryCount,
+	CONVERT(decimal,Curr.DividendCount)/10000 DividendCount,
+	CONVERT(decimal,Curr.RegularCount)/10000 RegularCount,
 	CONVERT(decimal,Curr.NetPurchaseCount)/10000 NetPurchaseCount,
 	CONVERT(decimal,Curr.TotalCount)/10000 TotalCount,
 	case when ISNULL(Prev.NetPurchaseCount, 0) = 0

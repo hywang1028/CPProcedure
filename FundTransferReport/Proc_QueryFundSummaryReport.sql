@@ -86,124 +86,180 @@ set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01
 set @ThisYearRunningEndDate = @CurrEndDate;
 
 --3. Get Current Data
+With CurrFundTrans as
+(
+	select
+		TransType,
+		COUNT(TransAmt) TransCnt,
+		SUM(TransAmt) TransAmt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @CurrStartDate
+		and
+		TransDate <  @CurrEndDate
+		and
+		TransType in ('3010','3020','3030','3040','3050')
+	group by
+		TransType
+)
 select
-	SUM(PurchaseCount) CurrPurchaseCount,
-	SUM(PurchaseAmount) CurrPurchaseAmount,
-	--case when SUM(PurchaseCount)=0 then null else SUM(PurchaseAmount)/SUM(PurchaseCount) end CurrPurchaseAvg,
+	SUM(case when TransType = '3010' then TransCnt End) CurrPurchaseCount,
+	SUM(case when TransType = '3010' then TransAmt End) CurrPurchaseAmount,
 	
-	SUM(RetractCount) CurrRetractCount,
-	SUM(RetractAmount) CurrRetractAmount,
-	--case when SUM(RetractCount)=0 then null else SUM(RetractAmount)/SUM(RetractCount) end CurrRetractAvg,
+	SUM(case when TransType = '3020' then TransCnt End) CurrRetractCount,
+	SUM(case when TransType = '3020' then TransAmt End) CurrRetractAmount,	
 	
-	SUM(DividendCount) CurrDividendCount,
-	SUM(DividendAmount) CurrDividendAmount,
-	--case when SUM(DividendCount)=0 then null else SUM(DividendAmount)/SUM(DividendCount) end CurrDividendAvg,
+	SUM(case when TransType = '3030' then TransCnt End) CurrRedemptoryCount,
+	SUM(case when TransType = '3030' then TransAmt End) CurrRedemptoryAmount,
 	
-	SUM(RedemptoryCount) CurrRedemptoryCount,
-	SUM(RedemptoryAmount) CurrRedemptoryAmount,
-	--case when SUM(RedemptoryCount)=0 then null else SUM(RedemptoryAmount)/SUM(RedemptoryCount) end CurrRedemptoryAvg,
+	SUM(case when TransType = '3040' then TransCnt End) CurrDividendCount,
+	SUM(case when TransType = '3040' then TransAmt End) CurrDividendAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) CurrNetPurchaseCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) CurrNetPurchaseAmount,
-	--case when SUM(PurchaseAmount) - SUM(RetractAmount)=0 
-	--then null else (SUM(PurchaseCount) - SUM(RetractCount))/(SUM(PurchaseAmount) - SUM(RetractAmount)) end CurrNetPurchaseAvg,
+	SUM(case when TransType = '3050' then TransCnt End) CurrRegularCount,
+	SUM(case when TransType = '3050' then TransAmt End) CurrRegularAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) + SUM(DividendCount) + SUM(RedemptoryCount) CurrTotalCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) + SUM(DividendAmount) + SUM(RedemptoryAmount) CurrTotalAmount
-	--case when SUM(PurchaseCount) - SUM(RetractCount) + SUM(DividendCount) + SUM(RedemptoryCount) = 0
-	--then null else (SUM(PurchaseAmount) - SUM(RetractAmount) + SUM(DividendAmount) + SUM(RedemptoryAmount))/(SUM(PurchaseCount) - SUM(RetractCount) + SUM(DividendCount) + SUM(RedemptoryCount)) end CurrTotalAvg
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) CurrNetPurchaseCount,
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) CurrNetPurchaseAmount,
+
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) CurrTotalCount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) CurrTotalAmount
 into
-	#CurrData
+	#CurrData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @CurrStartDate
-	and
-	TransDate < @CurrEndDate;
+	CurrFundTrans;
 	
 --4. Get Previous Data
+With PrevFundTrans as
+(
+	select
+		TransType,
+		COUNT(TransAmt) TransCnt,
+		SUM(TransAmt) TransAmt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @PrevStartDate
+		and
+		TransDate <  @PrevEndDate
+		and
+		TransType in ('3010','3020','3030','3040','3050')
+	group by
+		TransType
+)
 select
-	SUM(PurchaseCount) PrevPurchaseCount,
-	SUM(PurchaseAmount) PrevPurchaseAmount,
+	SUM(case when TransType = '3010' then TransCnt End) PrevPurchaseCount,
+	SUM(case when TransType = '3010' then TransAmt End) PrevPurchaseAmount,
 	
-	SUM(RetractCount) PrevRetractCount,
-	SUM(RetractAmount) PrevRetractAmount,
+	SUM(case when TransType = '3020' then TransCnt End) PrevRetractCount,
+	SUM(case when TransType = '3020' then TransAmt End) PrevRetractAmount,	
 	
-	SUM(DividendCount) PrevDividendCount,
-	SUM(DividendAmount) PrevDividendAmount,
+	SUM(case when TransType = '3030' then TransCnt End) PrevRedemptoryCount,
+	SUM(case when TransType = '3030' then TransAmt End) PrevRedemptoryAmount,
 	
-	SUM(RedemptoryCount) PrevRedemptoryCount,
-	SUM(RedemptoryAmount) PrevRedemptoryAmount,
+	SUM(case when TransType = '3040' then TransCnt End) PrevDividendCount,
+	SUM(case when TransType = '3040' then TransAmt End) PrevDividendAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) PrevNetPurchaseCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) PrevNetPurchaseAmount,
+	SUM(case when TransType = '3050' then TransCnt End) PrevRegularCount,
+	SUM(case when TransType = '3050' then TransAmt End) PrevRegularAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) + SUM(DividendCount) + SUM(RedemptoryCount) PrevTotalCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) + SUM(DividendAmount) + SUM(RedemptoryAmount) PrevTotalAmount
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) PrevNetPurchaseCount,
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) PrevNetPurchaseAmount,
+
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) PrevTotalCount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) PrevTotalAmount
 into
-	#PrevData
+	#PrevData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @PrevStartDate
-	and
-	TransDate < @PrevEndDate;
+	PrevFundTrans;
 
 --5. Get LastYear Data
+With LastYearFundTrans as
+(
+	select
+		TransType,
+		COUNT(TransAmt) TransCnt,
+		SUM(TransAmt) TransAmt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @LastYearStartDate
+		and
+		TransDate <  @LastYearEndDate
+		and
+		TransType in ('3010','3020','3030','3040','3050')
+	group by
+		TransType
+)
 select
-	SUM(PurchaseCount) LastYearPurchaseCount,
-	SUM(PurchaseAmount) LastYearPurchaseAmount,
+	SUM(case when TransType = '3010' then TransCnt End) LastYearPurchaseCount,
+	SUM(case when TransType = '3010' then TransAmt End) LastYearPurchaseAmount,
 	
-	SUM(RetractCount) LastYearRetractCount,
-	SUM(RetractAmount) LastYearRetractAmount,
+	SUM(case when TransType = '3020' then TransCnt End) LastYearRetractCount,
+	SUM(case when TransType = '3020' then TransAmt End) LastYearRetractAmount,	
 	
-	SUM(DividendCount) LastYearDividendCount,
-	SUM(DividendAmount) LastYearDividendAmount,
+	SUM(case when TransType = '3030' then TransCnt End) LastYearRedemptoryCount,
+	SUM(case when TransType = '3030' then TransAmt End) LastYearRedemptoryAmount,
 	
-	SUM(RedemptoryCount) LastYearRedemptoryCount,
-	SUM(RedemptoryAmount) LastYearRedemptoryAmount,
+	SUM(case when TransType = '3040' then TransCnt End) LastYearDividendCount,
+	SUM(case when TransType = '3040' then TransAmt End) LastYearDividendAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) LastYearNetPurchaseCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) LastYearNetPurchaseAmount,
+	SUM(case when TransType = '3050' then TransCnt End) LastYearRegularCount,
+	SUM(case when TransType = '3050' then TransAmt End) LastYearRegularAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) + SUM(DividendCount) + SUM(RedemptoryCount) LastYearTotalCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) + SUM(DividendAmount) + SUM(RedemptoryAmount) LastYearTotalAmount
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) LastYearNetPurchaseCount,
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) LastYearNetPurchaseAmount,
+
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) LastYearTotalCount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) LastYearTotalAmount
 into
-	#LastYearData
+	#LastYearData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @LastYearStartDate
-	and
-	TransDate < @LastYearEndDate;
+	LastYearFundTrans;
 	
 --6. Get ThisYearRunning Data
+With ThisYearFundTrans as
+(
+	select
+		TransType,
+		COUNT(TransAmt) TransCnt,
+		SUM(TransAmt) TransAmt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @ThisYearRunningStartDate
+		and
+		TransDate <  @ThisYearRunningEndDate
+		and
+		TransType in ('3010','3020','3030','3040','3050')
+	group by
+		TransType
+)
 select
-	SUM(PurchaseCount) ThisYearRunningPurchaseCount,
-	SUM(PurchaseAmount) ThisYearRunningPurchaseAmount,
+	SUM(case when TransType = '3010' then TransCnt End) ThisYearRunningPurchaseCount,
+	SUM(case when TransType = '3010' then TransAmt End) ThisYearRunningPurchaseAmount,
 	
-	SUM(RetractCount) ThisYearRunningRetractCount,
-	SUM(RetractAmount) ThisYearRunningRetractAmount,
+	SUM(case when TransType = '3020' then TransCnt End) ThisYearRunningRetractCount,
+	SUM(case when TransType = '3020' then TransAmt End) ThisYearRunningRetractAmount,	
 	
-	SUM(DividendCount) ThisYearRunningDividendCount,
-	SUM(DividendAmount) ThisYearRunningDividendAmount,
+	SUM(case when TransType = '3030' then TransCnt End) ThisYearRunningRedemptoryCount,
+	SUM(case when TransType = '3030' then TransAmt End) ThisYearRunningRedemptoryAmount,
 	
-	SUM(RedemptoryCount) ThisYearRunningRedemptoryCount,
-	SUM(RedemptoryAmount) ThisYearRunningRedemptoryAmount,
+	SUM(case when TransType = '3040' then TransCnt End) ThisYearRunningDividendCount,
+	SUM(case when TransType = '3040' then TransAmt End) ThisYearRunningDividendAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) ThisYearRunningNetPurchaseCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) ThisYearRunningNetPurchaseAmount,
+	SUM(case when TransType = '3050' then TransCnt End) ThisYearRunningRegularCount,
+	SUM(case when TransType = '3050' then TransAmt End) ThisYearRunningRegularAmount,
 	
-	SUM(PurchaseCount) - SUM(RetractCount) + SUM(DividendCount) + SUM(RedemptoryCount) ThisYearRunningTotalCount,
-	SUM(PurchaseAmount) - SUM(RetractAmount) + SUM(DividendAmount) + SUM(RedemptoryAmount) ThisYearRunningTotalAmount
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) ThisYearRunningNetPurchaseCount,
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) ThisYearRunningNetPurchaseAmount,
+
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) ThisYearRunningTotalCount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) ThisYearRunningTotalAmount
 into
-	#ThisYearRunningData
+	#ThisYearRunningData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @ThisYearRunningStartDate
-	and
-	TransDate < @ThisYearRunningEndDate;
+	ThisYearFundTrans;
 	
 --7. Cross Join All Temp Tables
 select
@@ -244,7 +300,7 @@ With ExpandRowCount as
 	from
 		NumSequence
 	where
-		rowid < 7
+		rowid < 8
 )
 select
 	ExpandRowCount.rowid,
@@ -252,8 +308,9 @@ select
 		when ExpandRowCount.rowid = 2 then N'撤单'
 		when ExpandRowCount.rowid = 3 then N'分红'
 		when ExpandRowCount.rowid = 4 then N'赎回'
-		when ExpandRowCount.rowid = 5 then N'净申购'
-		when ExpandRowCount.rowid = 6 then N'基金交易量'
+		when ExpandRowCount.rowid = 5 then N'定投'
+		when ExpandRowCount.rowid = 6 then N'净申购'
+		when ExpandRowCount.rowid = 7 then N'基金交易量'
 	else N'' end as BizType,
 	
 --Curr Amount
@@ -261,16 +318,18 @@ select
 		when ExpandRowCount.rowid = 2 then AllData.CurrRetractAmount
 		when ExpandRowCount.rowid = 3 then AllData.CurrDividendAmount
 		when ExpandRowCount.rowid = 4 then AllData.CurrRedemptoryAmount
-		when ExpandRowCount.rowid = 5 then AllData.CurrNetPurchaseAmount
-		when ExpandRowCount.rowid = 6 then AllData.CurrTotalAmount
+		when ExpandRowCount.rowid = 5 then AllData.CurrRegularAmount
+		when ExpandRowCount.rowid = 6 then AllData.CurrNetPurchaseAmount
+		when ExpandRowCount.rowid = 7 then AllData.CurrTotalAmount
 	else 0 end as CurrAmount,
 --Curr Count	
 	case when ExpandRowCount.rowid = 1 then AllData.CurrPurchaseCount
 		when ExpandRowCount.rowid = 2 then AllData.CurrRetractCount
 		when ExpandRowCount.rowid = 3 then AllData.CurrDividendCount
 		when ExpandRowCount.rowid = 4 then AllData.CurrRedemptoryCount
-		when ExpandRowCount.rowid = 5 then AllData.CurrNetPurchaseCount
-		when ExpandRowCount.rowid = 6 then AllData.CurrTotalCount
+		when ExpandRowCount.rowid = 5 then AllData.CurrRegularCount
+		when ExpandRowCount.rowid = 6 then AllData.CurrNetPurchaseCount
+		when ExpandRowCount.rowid = 7 then AllData.CurrTotalCount
 	else 0 end as CurrCount,
 	
 --Prev Amount	
@@ -278,16 +337,18 @@ select
 		when ExpandRowCount.rowid = 2 then AllData.PrevRetractAmount
 		when ExpandRowCount.rowid = 3 then AllData.PrevDividendAmount
 		when ExpandRowCount.rowid = 4 then AllData.PrevRedemptoryAmount
-		when ExpandRowCount.rowid = 5 then AllData.PrevNetPurchaseAmount
-		when ExpandRowCount.rowid = 6 then AllData.PrevTotalAmount
+		when ExpandRowCount.rowid = 5 then AllData.PrevRegularAmount
+		when ExpandRowCount.rowid = 6 then AllData.PrevNetPurchaseAmount
+		when ExpandRowCount.rowid = 7 then AllData.PrevTotalAmount
 	else 0 end as PrevAmount,
 --Prev Count	
 	case when ExpandRowCount.rowid = 1 then AllData.PrevPurchaseCount
 		when ExpandRowCount.rowid = 2 then AllData.PrevRetractCount
 		when ExpandRowCount.rowid = 3 then AllData.PrevDividendCount
 		when ExpandRowCount.rowid = 4 then AllData.PrevRedemptoryCount
-		when ExpandRowCount.rowid = 5 then AllData.PrevNetPurchaseCount
-		when ExpandRowCount.rowid = 6 then AllData.PrevTotalCount
+		when ExpandRowCount.rowid = 5 then AllData.PrevRegularCount
+		when ExpandRowCount.rowid = 6 then AllData.PrevNetPurchaseCount
+		when ExpandRowCount.rowid = 7 then AllData.PrevTotalCount
 	else 0 end as PrevCount,
 	
 --Last Year Amount	
@@ -295,16 +356,18 @@ select
 		when ExpandRowCount.rowid = 2 then AllData.LastYearRetractAmount
 		when ExpandRowCount.rowid = 3 then AllData.LastYearDividendAmount
 		when ExpandRowCount.rowid = 4 then AllData.LastYearRedemptoryAmount
-		when ExpandRowCount.rowid = 5 then AllData.LastYearNetPurchaseAmount
-		when ExpandRowCount.rowid = 6 then AllData.LastYearTotalAmount
+		when ExpandRowCount.rowid = 5 then AllData.LastYearRegularAmount
+		when ExpandRowCount.rowid = 6 then AllData.LastYearNetPurchaseAmount
+		when ExpandRowCount.rowid = 7 then AllData.LastYearTotalAmount
 	else 0 end as LastYearAmount,
 --Last Year Count	
 	case when ExpandRowCount.rowid = 1 then AllData.LastYearPurchaseCount
 		when ExpandRowCount.rowid = 2 then AllData.LastYearRetractCount
 		when ExpandRowCount.rowid = 3 then AllData.LastYearDividendCount
 		when ExpandRowCount.rowid = 4 then AllData.LastYearRedemptoryCount
-		when ExpandRowCount.rowid = 5 then AllData.LastYearNetPurchaseCount
-		when ExpandRowCount.rowid = 6 then AllData.LastYearTotalCount
+		when ExpandRowCount.rowid = 5 then AllData.LastYearRegularCount
+		when ExpandRowCount.rowid = 6 then AllData.LastYearNetPurchaseCount
+		when ExpandRowCount.rowid = 7 then AllData.LastYearTotalCount
 	else 0 end as LastYearCount,
 	
 --This Year Running Amount	
@@ -312,16 +375,18 @@ select
 		when ExpandRowCount.rowid = 2 then AllData.ThisYearRunningRetractAmount
 		when ExpandRowCount.rowid = 3 then AllData.ThisYearRunningDividendAmount
 		when ExpandRowCount.rowid = 4 then AllData.ThisYearRunningRedemptoryAmount
-		when ExpandRowCount.rowid = 5 then AllData.ThisYearRunningNetPurchaseAmount
-		when ExpandRowCount.rowid = 6 then AllData.ThisYearRunningTotalAmount
+		when ExpandRowCount.rowid = 5 then AllData.ThisYearRunningRegularAmount
+		when ExpandRowCount.rowid = 6 then AllData.ThisYearRunningNetPurchaseAmount
+		when ExpandRowCount.rowid = 7 then AllData.ThisYearRunningTotalAmount
 	else 0 end as ThisYearRunningAmount,
 --This Year Running Count	
 	case when ExpandRowCount.rowid = 1 then AllData.ThisYearRunningPurchaseCount
 		when ExpandRowCount.rowid = 2 then AllData.ThisYearRunningRetractCount
 		when ExpandRowCount.rowid = 3 then AllData.ThisYearRunningDividendCount
 		when ExpandRowCount.rowid = 4 then AllData.ThisYearRunningRedemptoryCount
-		when ExpandRowCount.rowid = 5 then AllData.ThisYearRunningNetPurchaseCount
-		when ExpandRowCount.rowid = 6 then AllData.ThisYearRunningTotalCount
+		when ExpandRowCount.rowid = 5 then AllData.ThisYearRunningRegularCount
+		when ExpandRowCount.rowid = 6 then AllData.ThisYearRunningNetPurchaseCount
+		when ExpandRowCount.rowid = 7 then AllData.ThisYearRunningTotalCount
 	else 0 end as ThisYearRunningCount
 into
 	#PivotData
