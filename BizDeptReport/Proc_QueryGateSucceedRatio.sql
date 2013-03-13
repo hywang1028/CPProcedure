@@ -134,7 +134,7 @@ group by
 
 --6. Get Total SucceedCount
 select
-	ISNULL(GateRoute.GateDesc,N'其它') BankName,
+	ISNULL(GateRoute.GateAlias,N'其它') BankName,
 	GateRoute.GateNo,
 	ISNULL(CurrCount.CurrSucceedCount, 0) CurrSucceedCount,
 	ISNULL(CurrCount.CurrTotalCount, 0) CurrTotalCount,
