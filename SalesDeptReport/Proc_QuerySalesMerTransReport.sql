@@ -1,4 +1,5 @@
 --[Modified] on 2012-06-08 By Õı∫Ï—‡ Description:Add West Union Trans Data
+--[Modified] on 2013-03-05 By Õı∫Ï—‡ Description:Modify Channel Info 
 if OBJECT_ID(N'Proc_QuerySalesMerTransReport', N'P') is not null
 begin
 	drop procedure Proc_QuerySalesMerTransReport;
@@ -257,7 +258,7 @@ select
 	Sales.MerchantNo,
 	Sales.MerchantType,
 	Sales.IndustryName,
-	Sales.Channel,
+	Sales.MerchantClass Channel,
 	Sales.BranchOffice,
 	Sales.SigningYear,
 	Rate.CurrencyRate,
