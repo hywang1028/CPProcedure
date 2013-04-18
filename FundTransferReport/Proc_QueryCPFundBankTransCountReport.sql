@@ -86,82 +86,220 @@ set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01
 set @ThisYearRunningEndDate = @CurrEndDate;
 
 --3. Get Current Data
+With CurrTransWithCardNo as
+(
+	select
+		TransType,
+		TransAmt,
+		case when
+			TransType in ('1010','3010')
+		then
+			CardID
+		else
+			CardTwo
+		end CardNo
+	from
+		dbo.Table_TrfTransLog
+	where
+		TransType in ('1010','3010','3020','3030','3040','3050')
+		and
+		TransDate >= @CurrStartDate
+		and
+		TransDate <  @CurrEndDate
+),
+TransData as
+(
+	select
+		(select BankName from Table_BankID where BankNo = FundCardBin.BankNo) BankName,
+		TransWithCardNo.TransType,
+		Sum(TransWithCardNo.TransAmt) as TransAmt,
+		COUNT(TransWithCardNo.TransAmt) as TransCnt
+	from
+		CurrTransWithCardNo TransWithCardNo
+		left join
+		dbo.Table_FundCardBin FundCardBin
+		on
+			TransWithCardNo.CardNo like (RTrim(FundCardBin.CardBin)+'%')
+	group by
+		FundCardBin.BankNo,
+		TransWithCardNo.TransType
+)
 select
-	BankNo,
-	SUM(isnull(RegisterCount,0)) as RegisterCount,
-	SUM(isnull(PurchaseCount,0)) as PurchaseCount,
-	SUM(isnull(RetractCount,0)) as RetractCount,
-	SUM(isnull(DividendCount,0)) as DividendCount,
-	SUM(isnull(RedemptoryCount,0)) as RedemptoryCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	ISNULL(BankName,N'未知银行') BankName,
+	SUM(case when TransType = '1010' then TransCnt End) RegisterCount,	
+	SUM(case when TransType = '3010' then TransCnt End) PurchaseCount,	
+	SUM(case when TransType = '3020' then TransCnt End) RetractCount,		
+	SUM(case when TransType = '3030' then TransCnt End) RedemptoryCount,	
+	SUM(case when TransType = '3040' then TransCnt End) DividendCount,	
+	SUM(case when TransType = '3050' then TransCnt End) RegularCount,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#CurrData
+	#CurrData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @CurrStartDate
-	and
-	TransDate < @CurrEndDate
+	TransData
 group by
-	BankNo;
+	BankName;
 	
 --4. Get Previous Data
+With CurrTransWithCardNo as
+(
+	select
+		TransType,
+		TransAmt,
+		case when
+			TransType in ('1010','3010')
+		then
+			CardID
+		else
+			CardTwo
+		end CardNo
+	from
+		dbo.Table_TrfTransLog
+	where
+		TransType in ('1010','3010','3020','3030','3040','3050')
+		and
+		TransDate >= @PrevStartDate
+		and
+		TransDate <  @PrevEndDate
+),
+TransData as
+(
+	select
+		(select BankName from Table_BankID where BankNo = FundCardBin.BankNo) BankName,
+		TransWithCardNo.TransType,
+		Sum(TransWithCardNo.TransAmt) as TransAmt,
+		COUNT(TransWithCardNo.TransAmt) as TransCnt
+	from
+		CurrTransWithCardNo TransWithCardNo
+		left join
+		dbo.Table_FundCardBin FundCardBin
+		on
+			TransWithCardNo.CardNo like (RTrim(FundCardBin.CardBin)+'%')
+	group by
+		FundCardBin.BankNo,
+		TransWithCardNo.TransType
+)
 select
-	BankNo,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	ISNULL(BankName,N'未知银行') BankName,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#PrevData
+	#PrevData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @PrevStartDate
-	and
-	TransDate < @PrevEndDate
+	TransData
 group by
-	BankNo;
+	BankName;
 
 --5. Get LastYear Data
+With CurrTransWithCardNo as
+(
+	select
+		TransType,
+		TransAmt,
+		case when
+			TransType in ('1010','3010')
+		then
+			CardID
+		else
+			CardTwo
+		end CardNo
+	from
+		dbo.Table_TrfTransLog
+	where
+		TransType in ('1010','3010','3020','3030','3040','3050')
+		and
+		TransDate >= @LastYearStartDate
+		and
+		TransDate <  @LastYearEndDate
+),
+TransData as
+(
+	select
+		(select BankName from Table_BankID where BankNo = FundCardBin.BankNo) BankName,
+		TransWithCardNo.TransType,
+		Sum(TransWithCardNo.TransAmt) as TransAmt,
+		COUNT(TransWithCardNo.TransAmt) as TransCnt
+	from
+		CurrTransWithCardNo TransWithCardNo
+		left join
+		dbo.Table_FundCardBin FundCardBin
+		on
+			TransWithCardNo.CardNo like (RTrim(FundCardBin.CardBin)+'%')
+	group by
+		FundCardBin.BankNo,
+		TransWithCardNo.TransType
+)
 select
-	BankNo,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	ISNULL(BankName,N'未知银行') BankName,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#LastYearData
+	#LastYearData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @LastYearStartDate
-	and
-	TransDate < @LastYearEndDate
+	TransData
 group by
-	BankNo;
+	BankName;
 	
 --6. Get ThisYearRunning Data
+With CurrTransWithCardNo as
+(
+	select
+		TransType,
+		TransAmt,
+		case when
+			TransType in ('1010','3010')
+		then
+			CardID
+		else
+			CardTwo
+		end CardNo
+	from
+		dbo.Table_TrfTransLog
+	where
+		TransType in ('1010','3010','3020','3030','3040','3050')
+		and
+		TransDate >= @ThisYearRunningStartDate
+		and
+		TransDate <  @ThisYearRunningEndDate
+),
+TransData as
+(
+	select
+		(select BankName from Table_BankID where BankNo = FundCardBin.BankNo) BankName,
+		TransWithCardNo.TransType,
+		Sum(TransWithCardNo.TransAmt) as TransAmt,
+		COUNT(TransWithCardNo.TransAmt) as TransCnt
+	from
+		CurrTransWithCardNo TransWithCardNo
+		left join
+		dbo.Table_FundCardBin FundCardBin
+		on
+			TransWithCardNo.CardNo like (RTrim(FundCardBin.CardBin)+'%')
+	group by
+		FundCardBin.BankNo,
+		TransWithCardNo.TransType
+)
 select
-	BankNo,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)) as NetPurchaseCount,
-	SUM(isnull(PurchaseCount,0)-isnull(RetractCount,0)+isnull(DividendCount,0)+isnull(RedemptoryCount,0)) as TotalCount
+	ISNULL(BankName,N'未知银行') BankName,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransCnt Else TransCnt End End) NetPurchaseCount,
+	SUM(case when TransType = '3020' then -1*TransCnt Else TransCnt End) TotalCount
 into
-	#ThisYearRunningData
+	#ThisYearRunningData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @ThisYearRunningStartDate
-	and
-	TransDate < @ThisYearRunningEndDate
+	TransData
 group by
-	BankNo;
+	BankName;
 
 --7. Get Result
 select
-	BizFundBank.BankName,
+	coalesce(Curr.BankName,Prev.BankName,LastYear.BankName,ThisYearRunning.BankName,N'未知银行') BankName,
 	Curr.RegisterCount,
 	CONVERT(decimal,Curr.PurchaseCount)/10000 PurchaseCount,
 	CONVERT(decimal,Curr.RetractCount)/10000 RetractCount,
-	CONVERT(decimal,Curr.DividendCount)/10000 DividendCount,
 	CONVERT(decimal,Curr.RedemptoryCount)/10000 RedemptoryCount,
+	CONVERT(decimal,Curr.DividendCount)/10000 DividendCount,
+	CONVERT(decimal,Curr.RegularCount)/10000 RegularCount,
 	CONVERT(decimal,Curr.NetPurchaseCount)/10000 NetPurchaseCount,
 	CONVERT(decimal,Curr.TotalCount)/10000 TotalCount,
 	case when ISNULL(Prev.NetPurchaseCount, 0) = 0
@@ -187,23 +325,19 @@ select
 	Convert(decimal,ISNULL(LastYear.NetPurchaseCount, 0))/1000000 LastYearNetPurchaseCount,
 	Convert(decimal,ISNULL(LastYear.TotalCount, 0))/10000 LastYearTotalCount
 from
-	Table_BankID BizFundBank
-	left join
 	#CurrData Curr
-	on
-		BizFundBank.BankNo = Curr.BankNo
-	left join
+	full outer join
 	#PrevData Prev
 	on
-		BizFundBank.BankNo = Prev.BankNo
-	left join
+		Curr.BankName = Prev.BankName
+	full outer join
 	#LastYearData LastYear
 	on
-		BizFundBank.BankNo = LastYear.BankNo
-	left join
+		coalesce(Curr.BankName,Prev.BankName) = LastYear.BankName
+	full outer join
 	#ThisYearRunningData ThisYearRunning
 	on
-		BizFundBank.BankNo = ThisYearRunning.BankNo;
+		coalesce(Curr.BankName,Prev.BankName,LastYear.BankName) = ThisYearRunning.BankName;
 	
 --8. Clear temp table
 drop table #CurrData;

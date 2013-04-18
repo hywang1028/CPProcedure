@@ -86,71 +86,93 @@ set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01
 set @ThisYearRunningEndDate = @CurrEndDate;
 
 --3. Get Current Data
+With CurrFundTrans as
+(
+	select
+		MerchantNo,
+		TransType,
+		COUNT(TransAmt) TransCnt,
+		SUM(TransAmt) TransAmt
+	from
+		Table_TrfTransLog
+	where
+		TransDate >= @CurrStartDate
+		and
+		TransDate <  @CurrEndDate
+		and
+		TransType in ('1010','3010','3020','3030','3040','3050')
+	group by
+		MerchantNo,
+		TransType
+)
 select
 	MerchantNo,
-	SUM(isnull(RegisterCount,0)) as RegisterCount,
-	SUM(isnull(PurchaseAmount,0)) as PurchaseAmount,
-	SUM(isnull(RetractAmount,0)) as RetractAmount,
-	SUM(isnull(DividendAmount,0)) as DividendAmount,
-	SUM(isnull(RedemptoryAmount,0)) as RedemptoryAmount,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)) as NetPurchaseAmount,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)+isnull(DividendAmount,0)+isnull(RedemptoryAmount,0)) as TotalAmount
+	SUM(case when TransType = '1010' then TransCnt End) RegisterCount,	
+	SUM(case when TransType = '3010' then TransAmt End) PurchaseAmount,	
+	SUM(case when TransType = '3020' then TransAmt End) RetractAmount,		
+	SUM(case when TransType = '3030' then TransAmt End) RedemptoryAmount,	
+	SUM(case when TransType = '3040' then TransAmt End) DividendAmount,	
+	SUM(case when TransType = '3050' then TransAmt End) RegularAmount,	
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) NetPurchaseAmount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) TotalAmount
 into
-	#CurrData
+	#CurrData	
 from
-	Table_FundTransSum
-where
-	TransDate >= @CurrStartDate
-	and
-	TransDate < @CurrEndDate
+	CurrFundTrans
 group by
 	MerchantNo;
 	
 --4. Get Previous Data
 select
 	MerchantNo,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)) as NetPurchaseAmount,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)+isnull(DividendAmount,0)+isnull(RedemptoryAmount,0)) as TotalAmount
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) NetPurchaseAmount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) TotalAmount
 into
-	#PrevData
+	#PrevData	
 from
-	Table_FundTransSum
+	Table_TrfTransLog
 where
 	TransDate >= @PrevStartDate
 	and
-	TransDate < @PrevEndDate
+	TransDate <  @PrevEndDate
+	and
+	TransType in ('3010','3020','3030','3040','3050')
 group by
 	MerchantNo;
 
 --5. Get LastYear Data
 select
 	MerchantNo,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)) as NetPurchaseAmount,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)+isnull(DividendAmount,0)+isnull(RedemptoryAmount,0)) as TotalAmount
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) NetPurchaseAmount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) TotalAmount
 into
-	#LastYearData
+	#LastYearData	
 from
-	Table_FundTransSum
+	Table_TrfTransLog
 where
 	TransDate >= @LastYearStartDate
 	and
-	TransDate < @LastYearEndDate
+	TransDate <  @LastYearEndDate
+	and
+	TransType in ('3010','3020','3030','3040','3050')
 group by
 	MerchantNo;
 	
 --6. Get ThisYearRunning Data
 select
 	MerchantNo,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)) as NetPurchaseAmount,
-	SUM(isnull(PurchaseAmount,0)-isnull(RetractAmount,0)+isnull(DividendAmount,0)+isnull(RedemptoryAmount,0)) as TotalAmount
+	SUM(case when TransType in ('3010','3020') then case when TransType = '3020' then -1*TransAmt Else TransAmt End End) NetPurchaseAmount,
+	SUM(case when TransType = '3020' then -1*TransAmt Else TransAmt End) TotalAmount
 into
-	#ThisYearRunningData
+	#ThisYearRunningData	
 from
-	Table_FundTransSum
+	Table_TrfTransLog
 where
 	TransDate >= @ThisYearRunningStartDate
 	and
-	TransDate < @ThisYearRunningEndDate
+	TransDate <  @ThisYearRunningEndDate
+	and
+	TransType in ('3010','3020','3030','3040','3050')
 group by
 	MerchantNo;
 	
@@ -167,8 +189,9 @@ select
 	Curr.RegisterCount,
 	CONVERT(decimal,Curr.PurchaseAmount)/1000000 PurchaseAmount,
 	CONVERT(decimal,Curr.RetractAmount)/1000000 RetractAmount,
-	CONVERT(decimal,Curr.DividendAmount)/1000000 DividendAmount,
 	CONVERT(decimal,Curr.RedemptoryAmount)/1000000 RedemptoryAmount,
+	CONVERT(decimal,Curr.DividendAmount)/1000000 DividendAmount,
+	CONVERT(decimal,Curr.RegularAmount)/1000000 RegularAmount,
 	CONVERT(decimal,Curr.NetPurchaseAmount)/1000000 NetPurchaseAmount,
 	CONVERT(decimal,Curr.TotalAmount)/1000000 TotalAmount,
 	case when ISNULL(@CurrNetPurchaseAmount, 0) = 0

@@ -1,4 +1,5 @@
 --[Modified] at 2012-07-13 by 王红燕  Description:Add Financial Dept Configuration Data
+--[Modified] at 2012-12-13 by 王红燕  Description:Add Branch Office Fund Trans Data
 if OBJECT_ID(N'Proc_QueryBranchOfficeSummarize',N'P') is not null
 begin
 	drop procedure Proc_QueryBranchOfficeSummarize;
@@ -6,8 +7,8 @@ end
 go
 
 create procedure Proc_QueryBranchOfficeSummarize
-	@StartDate datetime = '2011-01-21',
-	@EndDate datetime = '2011-07-12',
+	@StartDate datetime = '2012-11-01',
+	@EndDate datetime = '2012-11-12',
 	@PeriodUnit nChar(3) = N'自定义'
 as 
 begin
@@ -192,23 +193,58 @@ select
 from	
 	#EmallTransSum;
 
+--Add Branch Office Fund Trans Data
+select 
+	BranchOfficeNameRule.NormalBranchOfficeName BranchOffice,
+	SUM(Branch.B2BPurchaseCnt+Branch.B2BRedemptoryCnt+Branch.B2CPurchaseCnt+Branch.B2CRedemptoryCnt) TransCount,
+	SUM(Branch.B2BPurchaseAmt+Branch.B2BRedemptoryAmt+Branch.B2CPurchaseAmt+Branch.B2CRedemptoryAmt) TransAmount
+into
+	#BranchFundTrans
+from 
+	Table_UMSBranchFundTrans Branch
+	inner join
+	Table_BranchOfficeNameRule BranchOfficeNameRule
+	on
+		Branch.BranchOfficeName = BranchOfficeNameRule.UnnormalBranchOfficeName
+where	
+	Branch.TransDate >= @CurrStartDate
+	and
+	Branch.TransDate <  @CurrEndDate
+group by
+	BranchOfficeNameRule.NormalBranchOfficeName;
 
 --7. Get Result
+With TempResult as
+(
+	select
+		AllMerWithBranch.BranchOffice,
+		COUNT(NewlyOpenMer.MerchantNo) NewlyIncreMerCount,
+		SUM(ISNULL(AllMerWithBranch.TransCount,0)) SumTransCount,
+		SUM(ISNULL(AllMerWithBranch.TransAmount,0)) SumTransAmount
+	from
+		#AllMerWithBranch AllMerWithBranch
+		left join
+		#NewlyOpenMer NewlyOpenMer
+		on
+			AllMerWithBranch.MerchantNo = NewlyOpenMer.MerchantNo
+	group by
+		AllMerWithBranch.BranchOffice
+)
 select
-	AllMerWithBranch.BranchOffice,
-	COUNT(NewlyOpenMer.MerchantNo) NewlyIncreMerCount,
-	CONVERT(decimal,SUM(ISNULL(AllMerWithBranch.TransCount,0))) / 10000 SumTransCount,
-	CONVERT(decimal,SUM(ISNULL(AllMerWithBranch.TransAmount,0))) / 1000000 SumTransAmount 
+	TempResult.BranchOffice,
+	TempResult.NewlyIncreMerCount,
+	CONVERT(decimal,TempResult.SumTransCount)/10000 SumTransCount,
+	CONVERT(decimal,TempResult.SumTransAmount)/1000000 SumTransAmount,
+	CONVERT(decimal,ISNULL(BranchFundTrans.TransCount,0))/10000 SumFundCount,
+	CONVERT(decimal,ISNULL(BranchFundTrans.TransAmount,0))/1000000 SumFundAmount
 into 
 	#Result
 from
-	#AllMerWithBranch AllMerWithBranch
+	TempResult
 	left join
-	#NewlyOpenMer NewlyOpenMer
+	#BranchFundTrans BranchFundTrans
 	on
-		AllMerWithBranch.MerchantNo = NewlyOpenMer.MerchantNo
-group by
-	AllMerWithBranch.BranchOffice;
+		TempResult.BranchOffice = BranchFundTrans.BranchOffice;
 
 With #Sum as
 (
@@ -222,6 +258,8 @@ select
 	R.NewlyIncreMerCount,
 	R.SumTransCount,
 	R.SumTransAmount,
+	R.SumFundCount,
+	R.SumFundAmount,
 	case when 
 		S.WholeSum = 0
 	then
@@ -265,9 +303,9 @@ drop table #FactDailyTrans;
 drop table #EmallTransSum;
 drop table #NewlyOpenMer;
 drop table #MerWithBranch;
---drop table #OraAndDaily;
 drop table #OraAndDailyWithBranch;
 drop table #AllMerWithBranch;
 drop table #Result;
+drop table #BranchFundTrans;
 
 end

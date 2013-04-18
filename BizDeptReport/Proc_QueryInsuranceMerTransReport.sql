@@ -5,7 +5,7 @@ end
 go
 
 create procedure Proc_QueryInsuranceMerTransReport
-	@StartDate datetime = '2012-01-01',
+	@StartDate datetime = '2012-04-01',
 	@EndDate datetime = '2012-04-30'
 as
 begin
@@ -109,11 +109,22 @@ from
 		Ora.MerchantNo = MerRate.MerchantNo;
 		
 --3. Prepare Insurance Industry Merchant List
-With PayMer as 
+With AllMer as 
 (
 	select
-		MerchantNo,
-		MerchantName
+		coalesce(PayMer.MerchantNo,OraMer.MerchantNo) MerchantNo,
+		coalesce(PayMer.MerchantName,OraMer.MerchantName) MerchantName
+	from
+		Table_MerInfo PayMer
+		full outer join
+		Table_OraMerchants OraMer
+		on
+			PayMer.MerchantNo = OraMer.MerchantNo
+),
+InsuranceMer as 
+(
+	select
+		MerchantNo
 	from
 		Table_MerInfo
 	where
@@ -122,12 +133,9 @@ With PayMer as
 		MerchantName like N'%保险%'
 		or
 		MerchantName like N'%人寿%'
-),
-OraMer as 
-(
+	union
 	select
-		MerchantNo,
-		MerchantName
+		MerchantNo
 	from
 		Table_OraMerchants
 	where
@@ -136,32 +144,32 @@ OraMer as
 		MerchantName like N'%保险%'
 		or
 		MerchantName like N'%人寿%'
-),
-SalesMer as
-(
+	union
 	select
-		MerchantNo,
-		MerchantName
+		MerchantNo
 	from
-		Table_SalesDeptConfiguration
+		Table_MerAttribute
 	where
 		IndustryName like N'%保险%'
+	union
+	select
+		MerchantNo
+	from
+		Table_FinancialDeptConfiguration
+	where
+		IndustryName like N'%保险%' 
 ),
 MerList as
 (
-	select distinct
-		coalesce(PayMer.MerchantNo,OraMer.MerchantNo,SalesMer.MerchantNo) MerchantNo,
-		coalesce(PayMer.MerchantName,OraMer.MerchantName,SalesMer.MerchantName) MerchantName
+	select
+		InsuranceMer.MerchantNo,
+		AllMer.MerchantName
 	from
-		PayMer
-		full outer join
-		OraMer
+		InsuranceMer
+		left join
+		AllMer
 		on
-			PayMer.MerchantNo = OraMer.MerchantNo
-		full outer join
-		SalesMer
-		on
-			coalesce(PayMer.MerchantNo,OraMer.MerchantNo) = SalesMer.MerchantNo
+			InsuranceMer.MerchantNo = AllMer.MerchantNo
 ),
 
 --4. Prepare All Biz Trans Data
