@@ -25,12 +25,16 @@ declare @PrevStartDate datetime;
 declare @PrevEndDate datetime;
 declare @LastYearStartDate datetime;
 declare @LastYearEndDate datetime;
+declare @ThisYearRunningStartDate datetime;
+declare @ThisYearRunningEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DateAdd(day,1,@EndDate);
 set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
 set @PrevEndDate = @CurrStartDate;
 set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
 set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
+set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01';
+set @ThisYearRunningEndDate = @CurrEndDate;
 
 --3. Get Current Data
 With CurrCMCData as
@@ -297,7 +301,15 @@ from
 	on
 		Sales.MerchantNo = Rate.MerchantNo
 	left join
-	Table_EmployeeKPI KPI
+	(select 
+		*
+	 from
+		Table_EmployeeKPI 
+	 where
+		PeriodStartDate >= @ThisYearRunningStartDate
+		and 
+		PeriodStartDate <  DateAdd(day,1,@ThisYearRunningEndDate)
+	)KPI
 	on
 		Sales.SalesManager = KPI.EmpName
 order by

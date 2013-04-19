@@ -1,6 +1,7 @@
 --[Created] At 20120604 By 王红燕:销售考核报表(境外数据已转为人民币数据)
 --[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
+--[Modified] At 20130416 By 王红燕：Modify Biz Category and Cost Calc Format
 if OBJECT_ID(N'Proc_QuerySalesDeptKPIReport', N'P') is not null
 begin
 	drop procedure Proc_QuerySalesDeptKPIReport;
@@ -8,8 +9,8 @@ end
 go
 
 create procedure Proc_QuerySalesDeptKPIReport
-	@StartDate datetime = '2012-01-01',
-	@EndDate datetime = '2012-02-29'
+	@StartDate datetime = '2013-01-01',
+	@EndDate datetime = '2013-03-31'
 as
 begin
 
@@ -24,8 +25,8 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
-declare @HisRefDate datetime;
-set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
+--declare @HisRefDate datetime;
+--set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
 --set @CurrStartDate = '2012-01-01';
 --set @CurrEndDate = '2012-03-01';
 --3. Prepare Trans Data
@@ -45,7 +46,7 @@ create table #ProcPayCost
 insert into 
 	#ProcPayCost
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,@HisRefDate,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 
 select 
 	MerchantNo,
@@ -126,7 +127,7 @@ create table #ProcOraCost
 insert into 
 	#ProcOraCost
 exec 
-	Proc_CalOraCost @CurrStartDate,@CurrEndDate,@HisRefDate;
+	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
 	
 With OraFee as
 (
@@ -155,8 +156,8 @@ OraCost as
 		MerchantNo
 )
 select
-	N'代收付' as TypeName,
-	1 as OrderID,
+	N'代收付业务' as TypeName,
+	2 as OrderID,
 	OraCost.MerchantNo,
 	(select MerchantName from Table_OraMerchants where MerchantNo = OraCost.MerchantNo) MerchantName,
 	OraCost.TransAmt,
@@ -212,7 +213,7 @@ With WUTransData as
 (
 	select
 		N'西联汇款' as TypeName,
-		4 as OrderID,
+		3 as OrderID,
 		MerchantNo,
 		(select MerchantName from Table_OraMerchants where MerchantNo = Table_WUTransLog.MerchantNo) MerchantName,
 		SUM(DestTransAmount)/10000000000.0 TransAmt,
@@ -233,7 +234,7 @@ With WUTransData as
 DeductionData as 
 (
 	select
-		N'代收付' as TypeName,
+		N'代收付业务' as TypeName,
 		2 as OrderID,
 		MerchantNo,
 		(select MerchantName from Table_MerInfo where MerchantNo = #PayGateMerData.MerchantNo) MerchantName,
@@ -253,8 +254,8 @@ DeductionData as
 FundPayData as
 (
 	select
-		N'支付渠道基金(0044、0045网关交易)' as TypeName,
-		6 as OrderID,
+		N'B2C网银(境内)' as TypeName,
+		0 as OrderID,
 		MerchantNo,
 		(select MerchantName from Table_MerInfo where MerchantNo = FactDailyTrans.MerchantNo) MerchantName,
 		SUM(SucceedTransAmount)/10000000000.0 as TransAmt,
@@ -273,14 +274,12 @@ FundPayData as
 	group by
 		MerchantNo
 ),
---3.6 Prepare Convenience Data
-ConvenienceData as
+--3.6 Prepare B2C Trans Data
+B2CAllTrans as
 (
 	select
-		N'便民(公共事业缴费)' as TypeName,
-		3 as OrderID,
 		MerchantNo,
-		(select MerchantName from Table_MerInfo where MerchantNo = #PayGateMerData.MerchantNo) MerchantName,
+		GateNo,
 		SUM(TransAmt) TransAmt,
 		SUM(TransCnt) TransCnt,
 		SUM(CostAmt) CostAmt,
@@ -289,69 +288,105 @@ ConvenienceData as
 	from
 		#PayGateMerData
 	where
-		MerchantNo in (select MerchantNo from dbo.Table_InstuMerInfo where InstuNo = '000020100816001')
-		and
 		GateNo not in ('0044','0045')
 		and
-		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
+		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in (N'代扣',N'B2B'))
 	group by
-		MerchantNo
-),
---3.7 Prepare EMall Data
-EMallData as
-(
-	select
-		N'商城' as TypeName,
-		5 as OrderID,
 		MerchantNo,
-		(select MerchantName from Table_MerInfo where MerchantNo = #PayGateMerData.MerchantNo) MerchantName,
-		SUM(TransAmt) TransAmt,
-		SUM(TransCnt) TransCnt,
-		SUM(CostAmt) CostAmt,
-		SUM(FeeAmt) FeeAmt,
-		SUM(InstuFeeAmt) InstuFeeAmt
-	from
-		#PayGateMerData
-	where
-		MerchantNo in ('808080290000007')
-		and
-		GateNo not in ('0044','0045')
-		and
-		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
-	group by
-		MerchantNo
+		GateNo
 ),
---3.8 Prepare BizTrip Data
-BizTrip as
+DomesticTrans as
 (
 	select
-		N'银联商旅平台' as TypeName,
-		7 as OrderID,
-		MerchantNo,
-		(select MerchantName from Table_MerInfo where MerchantNo = #PayGateMerData.MerchantNo) MerchantName,
-		SUM(TransAmt) TransAmt,
-		SUM(TransCnt) TransCnt,
-		SUM(CostAmt) CostAmt,
-		SUM(FeeAmt) FeeAmt,
-		SUM(InstuFeeAmt) InstuFeeAmt
-	from
-		#PayGateMerData
-	where
-		MerchantNo in ('808080510003188')
-		and
-		GateNo not in ('0044','0045')
-		and
-		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
-	group by
-		MerchantNo
-),
---3.9 Prepare Left Payment Data
-OnlinePayData as
-(
-	select
-		N'一般网上支付' as TypeName,
+		N'B2C网银(境内)' as TypeName,
 		0 as OrderID,
 		MerchantNo,
+		(select MerchantName from Table_MerInfo where MerchantNo = B2CAllTrans.MerchantNo) MerchantName,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	from
+		B2CAllTrans
+	where
+		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in ('EPOS','UPOP'))
+		and
+		GateNo not in ('5901','5902')
+		and
+		MerchantNo not in (select distinct MerchantNo from Table_MerInfoExt)
+	group by
+		MerchantNo
+	union all
+	select
+		N'B2C网银(境内)' as TypeName,
+		0 as OrderID,
+		MerchantNo,
+		(select MerchantName from Table_MerInfo where MerchantNo = B2CAllTrans.MerchantNo) MerchantName,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	from
+		B2CAllTrans
+	where
+		GateNo in (select GateNo from Table_GateCategory where GateCategory1 in ('EPOS')) 
+		and
+		MerchantNo in (select MerchantNo from Table_EposTakeoffMerchant)
+		and
+		MerchantNo not in (select distinct MerchantNo from Table_MerInfoExt)
+	group by
+		MerchantNo
+),
+B2CTrans as
+(
+	select
+		N'支付B2C' as TypeName,
+		0 as OrderID,
+		AllTrans.MerchantNo,
+		(select MerchantName from Table_MerInfo where MerchantNo = AllTrans.MerchantNo) MerchantName,
+		(AllTrans.TransAmt - ISNULL(DomeTrans.TransAmt, 0)) TransAmt,
+		(AllTrans.TransCnt - ISNULL(DomeTrans.TransCnt, 0)) TransCnt,
+		(AllTrans.CostAmt - ISNULL(DomeTrans.CostAmt, 0)) CostAmt,
+		(AllTrans.FeeAmt - ISNULL(DomeTrans.FeeAmt, 0)) FeeAmt,
+		(AllTrans.InstuFeeAmt - ISNULL(DomeTrans.InstuFeeAmt, 0)) InstuFeeAmt
+	from
+		(select
+			MerchantNo,
+			SUM(TransAmt) TransAmt,
+			SUM(TransCnt) TransCnt,
+			SUM(CostAmt) CostAmt,
+			SUM(FeeAmt) FeeAmt,
+			SUM(InstuFeeAmt) InstuFeeAmt
+		 from
+			B2CAllTrans
+		 group by
+			MerchantNo
+		)AllTrans
+		left join
+		(select
+			MerchantNo,
+			SUM(TransAmt) TransAmt,
+			SUM(TransCnt) TransCnt,
+			SUM(CostAmt) CostAmt,
+			SUM(FeeAmt) FeeAmt,
+			SUM(InstuFeeAmt) InstuFeeAmt
+		 from
+			DomesticTrans
+		 group by
+			MerchantNo
+		)DomeTrans
+		on
+			AllTrans.MerchantNo = DomeTrans.MerchantNo
+),
+--3.7 Prepare B2B Trans Data
+B2BTrans as
+(
+	select
+		N'支付B2B' as TypeName,
+		1 as OrderID,
+		MerchantNo,
 		(select MerchantName from Table_MerInfo where MerchantNo = #PayGateMerData.MerchantNo) MerchantName,
 		SUM(TransAmt) TransAmt,
 		SUM(TransCnt) TransCnt,
@@ -361,37 +396,72 @@ OnlinePayData as
 	from
 		#PayGateMerData
 	where
-		MerchantNo not in ('808080510003188','808080290000007')
-		and
-		MerchantNo not in (select MerchantNo from dbo.Table_InstuMerInfo where InstuNo = '000020100816001')
-		and
-		GateNo not in ('0044','0045')
-		and
-		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
+		GateNo in (select GateNo from Table_GateCategory where GateCategory1 = N'B2B')
 	group by
 		MerchantNo
 )
 --4.Join All Data
-select * from OnlinePayData
+select * into #Result from B2CTrans
 union all
 select * from #OraAllData
 union all
 select * from DeductionData
 union all
-select * from ConvenienceData
+select * from B2BTrans
 union all
 select * from WUTransData
 union all
-select * from EMallData
-union all
 select * from FundPayData
 union all
-select * from BizTrip;
+select * from DomesticTrans;
+
+Update 
+	#Result
+Set
+	TypeName = N'支付B2C',
+	CostAmt = (10000.0 * TransAmt) * 0.0025
+where	
+	TypeName = N'B2C网银(境内)';
+	
+Update 
+	#Result
+Set
+	CostAmt = TransCnt * 5.0
+where	
+	TypeName = N'支付B2B';
+	
+Update 
+	#Result
+Set
+	CostAmt = TransCnt * 0.7
+where	
+	TypeName in (N'代收付业务');
+
+select
+	TypeName,
+	OrderID,
+	MerchantNo,
+	MerchantName,
+	SUM(TransAmt) TransAmt,
+	SUM(TransCnt) TransCnt,
+	SUM(CostAmt) CostAmt,
+	SUM(FeeAmt) FeeAmt,
+	SUM(InstuFeeAmt) InstuFeeAmt
+from
+	#Result
+group by
+	TypeName,
+	OrderID,
+	MerchantNo,
+	MerchantName
+order by
+	OrderID;
 	
 --5.Drop Temp Table
 Drop table #ProcPayCost;
 Drop table #PayGateMerData;
 Drop table #ProcOraCost;
 Drop table #OraAllData;
+Drop table #Result;
 
 End
