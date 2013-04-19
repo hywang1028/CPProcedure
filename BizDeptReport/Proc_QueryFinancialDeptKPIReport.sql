@@ -1,6 +1,7 @@
 --[Created] At 20120528 By 王红燕:金融考核报表(境外数据已转为人民币数据)
 --[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
+--[Modified] At 20130416 By 王红燕：Modify Biz Category and Cost Calc Format
 if OBJECT_ID(N'Proc_QueryFinancialDeptKPIReport', N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialDeptKPIReport;
@@ -8,8 +9,8 @@ end
 go
 
 create procedure Proc_QueryFinancialDeptKPIReport
-	@StartDate datetime = '2012-01-01',
-	@EndDate datetime = '2012-02-29'
+	@StartDate datetime = '2013-01-01',
+	@EndDate datetime = '2013-03-31'
 as
 begin
 
@@ -24,9 +25,31 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
-declare @HisRefDate datetime;
-set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
+--declare @HisRefDate datetime;
+--set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
 
+exec xprcFile '
+OrderID	BizCategory
+01	基金B2C
+02	基金B2B
+03	转账业务
+04	信用卡还款业务
+05	贵金属业务
+06	理财平台业务
+07	保险代收付
+08	支付B2C
+09	支付B2B
+10	代付业务
+11	pos业务
+12	结算款代付
+'
+select
+	*
+into
+	#BizOrder
+from
+	xlsContainer;
+	
 --3. Prepare Trans Data
 --3.0 Prepare Other Biz Data
 --3.0.1 Prepare Payment Cost and Income Data
@@ -44,7 +67,7 @@ create table #ProcResult
 insert into 
 	#ProcResult
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,@HisRefDate,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 	
 --3.0.2 Get Ora Trans Data
 create table #ProcOraCost
@@ -59,7 +82,7 @@ create table #ProcOraCost
 insert into 
 	#ProcOraCost
 exec 
-	Proc_CalOraCost @CurrStartDate,@CurrEndDate,@HisRefDate;
+	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
 	
 With OraFee as
 (
@@ -110,7 +133,7 @@ from
 update
 	Ora
 set
-	Ora.FeeAmt = (MerRate.FeeValue * Ora.TransCnt)/100.0
+	Ora.FeeAmt = (MerRate.FeeValue * (10000.0*Ora.TransCnt))/100.0
 from
 	#OraTransData Ora
 	inner join
@@ -136,12 +159,12 @@ With PaymentData as
 		MerchantNo,
 		GateNo
 ),
-notwithGateNoData as
+TranswithGateNoData as
 (	
 	select
 		Finance.BizCategory,
 		Finance.MerchantNo,
-		(select MerchantName from Table_MerInfo where MerchantNo = Finance.MerchantNo) as MerchantName,
+		PaymentData.GateNo,
 		Finance.BelongRate*ISNULL(PaymentData.TransAmt,0) TransAmt,
 		Finance.BelongRate*ISNULL(PaymentData.TransCnt,0) TransCnt,
 		Finance.BelongRate*ISNULL(PaymentData.FeeAmt,0) FeeAmt,
@@ -149,63 +172,203 @@ notwithGateNoData as
 		Finance.BelongRate*ISNULL(PaymentData.InstuFeeAmt,0) InstuFeeAmt
 	from
 		Table_BelongToFinance Finance
-		left join
-		(select
-			MerchantNo,
-			SUM(TransAmt) TransAmt,
-			SUM(TransCnt) TransCnt,
-			SUM(FeeAmt) FeeAmt,
-			SUM(CostAmt) CostAmt,
-			SUM(InstuFeeAmt) InstuFeeAmt
-		 from
-			PaymentData 
-		 group by
-			MerchantNo
-		)PaymentData
+		inner join
+		PaymentData
 		on
 			Finance.MerchantNo = PaymentData.MerchantNo
 	where
 		Finance.GateNo = 'all'
-),
-withGateNoData as
-(
+	union all
 	select
 		Finance.BizCategory,
 		Finance.MerchantNo,
-		(select MerchantName from Table_MerInfo where MerchantNo = Finance.MerchantNo) as MerchantName,
-		SUM(Finance.BelongRate*ISNULL(PaymentData.TransAmt,0)) TransAmt,
-		SUM(Finance.BelongRate*ISNULL(PaymentData.TransCnt,0)) TransCnt,
-		SUM(Finance.BelongRate*ISNULL(PaymentData.FeeAmt,0)) FeeAmt,
-		SUM(Finance.BelongRate*ISNULL(PaymentData.CostAmt,0)) CostAmt, 
-		SUM(Finance.BelongRate*ISNULL(PaymentData.InstuFeeAmt,0)) InstuFeeAmt
+		PaymentData.GateNo,
+		Finance.BelongRate*ISNULL(PaymentData.TransAmt,0) TransAmt,
+		Finance.BelongRate*ISNULL(PaymentData.TransCnt,0) TransCnt,
+		Finance.BelongRate*ISNULL(PaymentData.FeeAmt,0) FeeAmt,
+		Finance.BelongRate*ISNULL(PaymentData.CostAmt,0) CostAmt, 
+		Finance.BelongRate*ISNULL(PaymentData.InstuFeeAmt,0) InstuFeeAmt
 	from
 		Table_BelongToFinance Finance
-		left join
+		inner join
 		PaymentData 
 		on
 			Finance.MerchantNo = PaymentData.MerchantNo
 			and
 			Finance.GateNo = PaymentData.GateNo
 	where
-		Finance.GateNo <> 'all'	
+		Finance.GateNo <> 'all'
+),
+DomesticTrans as
+(
+	select
+		BizCategory,
+		MerchantNo,
+		GateNo,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	from
+		TranswithGateNoData
+	where
+		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in ('B2B',N'代扣','EPOS','UPOP'))
+		and
+		GateNo not in ('5901','5902')
+		and
+		MerchantNo not in (select distinct MerchantNo from Table_MerInfoExt)
 	group by
-		Finance.BizCategory,
-		Finance.MerchantNo
+		BizCategory,
+		MerchantNo,
+		GateNo
+	union all
+	select
+		BizCategory,
+		MerchantNo,
+		GateNo,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	from
+		TranswithGateNoData
+	where
+		GateNo in (select GateNo from Table_GateCategory where GateCategory1 in ('EPOS')) 
+		and
+		MerchantNo in (select MerchantNo from Table_EposTakeoffMerchant)
+		and
+		MerchantNo not in (select distinct MerchantNo from Table_MerInfoExt)
+	group by
+		BizCategory,
+		MerchantNo,
+		GateNo
+),
+OtherPayTrans as
+(
+	select
+		AllTrans.BizCategory,
+		AllTrans.MerchantNo,
+		AllTrans.GateNo,
+		(AllTrans.TransAmt - ISNULL(DomeTrans.TransAmt, 0)) TransAmt,
+		(AllTrans.TransCnt - ISNULL(DomeTrans.TransCnt, 0)) TransCnt,
+		(AllTrans.CostAmt - ISNULL(DomeTrans.CostAmt, 0)) CostAmt,
+		(AllTrans.FeeAmt - ISNULL(DomeTrans.FeeAmt, 0)) FeeAmt,
+		(AllTrans.InstuFeeAmt - ISNULL(DomeTrans.InstuFeeAmt, 0)) InstuFeeAmt
+	from
+		(select
+			BizCategory,
+			MerchantNo,
+			GateNo,
+			SUM(TransAmt) TransAmt,
+			SUM(TransCnt) TransCnt,
+			SUM(CostAmt) CostAmt,
+			SUM(FeeAmt) FeeAmt,
+			SUM(InstuFeeAmt) InstuFeeAmt
+		 from
+			TranswithGateNoData
+		 group by
+			BizCategory,
+			MerchantNo,
+			GateNo
+		)AllTrans
+		left join
+		(select
+			BizCategory,
+			MerchantNo,
+			GateNo,
+			SUM(TransAmt) TransAmt,
+			SUM(TransCnt) TransCnt,
+			SUM(CostAmt) CostAmt,
+			SUM(FeeAmt) FeeAmt,
+			SUM(InstuFeeAmt) InstuFeeAmt
+		 from
+			DomesticTrans
+		 group by
+			BizCategory,
+			MerchantNo,
+			GateNo
+		)DomeTrans
+		on
+			AllTrans.BizCategory = DomeTrans.BizCategory
+			and
+			AllTrans.MerchantNo = DomeTrans.MerchantNo
+			and
+			AllTrans.GateNo = DomeTrans.GateNo
+),
+otherTransDetail as
+(
+	select
+		OtherPayTrans.BizCategory,
+		OtherPayTrans.MerchantNo,
+		case when Gate.GateCategory1 = N'代扣' then N'代收付' 
+			 when Gate.GateCategory1 = N'B2B' then N'B2B' 
+			 Else N'其他' End as UpdateFlag,
+		OtherPayTrans.TransAmt TransAmt,
+		OtherPayTrans.TransCnt TransCnt,
+		OtherPayTrans.CostAmt as CostAmt,
+		OtherPayTrans.FeeAmt FeeAmt,
+		OtherPayTrans.InstuFeeAmt InstuFeeAmt
+	from
+		OtherPayTrans
+		left join
+		Table_GateCategory Gate
+		on
+			OtherPayTrans.GateNo = Gate.GateNo
+),
+otherTransSum as
+(
+	select
+		BizCategory,
+		MerchantNo,
+		UpdateFlag,
+		(select MerchantName from Table_MerInfo where MerchantNo = otherTransDetail.MerchantNo) MerchantName,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	from
+		otherTransDetail
+	group by
+		BizCategory,
+		MerchantNo,
+		UpdateFlag
+),
+DomesticSum as
+(
+	select
+		BizCategory,
+		MerchantNo,
+		'B2C网银(境内)' as UpdateFlag,
+		(select MerchantName from Table_MerInfo where MerchantNo = DomesticTrans.MerchantNo) MerchantName,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) as CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	 from
+		DomesticTrans
+	 group by
+		BizCategory,
+		MerchantNo
 ),
 FinanceOraTransData as
 (
 	select
 		Finance.BizCategory,
 		Finance.MerchantNo,
+		'代收付' as UpdateFlag,
 		(select MerchantName from Table_OraMerchants where MerchantNo = Finance.MerchantNo) as MerchantName,
 		Finance.BelongRate*ISNULL(Ora.TransAmt,0) TransAmt,
 		Finance.BelongRate*ISNULL(Ora.TransCnt,0) TransCnt,
+		Finance.BelongRate*ISNULL(Ora.CostAmt,0) as CostAmt, 
 		Finance.BelongRate*ISNULL(Ora.FeeAmt,0) FeeAmt,
-		Finance.BelongRate*ISNULL(Ora.CostAmt,0) CostAmt, 
 		Finance.BelongRate*ISNULL(Ora.InstuFeeAmt,0) InstuFeeAmt
 	from
 		Table_BelongToFinance Finance
-		left join
+		inner join
 		#OraTransData Ora
 		on
 			Finance.MerchantNo = Ora.MerchantNo
@@ -234,45 +397,48 @@ B2CTransData as
 	select
 		N'基金B2C' as BizCategory,
 		NULL as MerchantNo,
+		N'其他' as UpdateFlag,
 		NULL as MerchantName,
 		SUM(case when TransType = '3020' then -1*TransAmt else TransAmt End) as TransAmt,
 		SUM(case when TransType = '3020' then -1*TransCnt else TransCnt End) as TransCnt,
-		NULL as FeeAmt,
 		NULL as CostAmt,
+		NULL as FeeAmt,
 		NULL as InstuFeeAmt
 	from
 		AllTransferData
 	where
 		TransType in ('3010','3020','3030','3040')
 ),
---3.2 Prepare Transfer Data
+----3.2 Prepare Transfer Data
 TransferData as 
 (
 	select
 		N'转账业务' as BizCategory,
 		NULL as MerchantNo,
+		N'其他' as UpdateFlag,
 		NULL as MerchantName,
 		SUM(TransAmt) TransAmt,
 		SUM(TransCnt) TransCnt,
-		0.3*SUM(ISNULL(FeeAmt,0)) FeeAmt,
 		0 as CostAmt,
+		0.3*SUM(ISNULL(FeeAmt,0)) FeeAmt,
 		0 as InstuFeeAmt
 	from
 		AllTransferData
 	where
 		TransType = '2070'
 ),	
---3.3 Prepare CreditCardPayment Data
+----3.3 Prepare CreditCardPayment Data
 CreditCardData as
 (
 	select
 		N'信用卡还款业务' as BizCategory,
 		NULL as MerchantNo,
+		N'其他' as UpdateFlag,
 		NULL as MerchantName,
 		ISNULL(SUM(RepaymentAmount),0)/100000000 TransAmt,
 		Convert(decimal,ISNULL(SUM(RepaymentCount),0))/10000 TransCnt,
-		0.2*ISNULL(SUM(RepaymentCount),0) FeeAmt,
 		0 as CostAmt,
+		0.2*ISNULL(SUM(RepaymentCount),0) FeeAmt,
 		0 as InstuFeeAmt
 	from
 		Table_CreditCardPayment
@@ -281,41 +447,63 @@ CreditCardData as
 		and
 		RepaymentDate <  @CurrEndDate
 )
+
 --4.Join All Data
-select * from B2CTransData
-union all
-select
-	N'基金B2B' as BizCategory,
-	NULL as MerchantNo,
-	NULL as MerchantName,
-	NULL as TransAmt,
-	NULL as TransCnt,
-	NULL as FeeAmt,
-	NULL as CostAmt,
-	NULL as InstuFeeAmt
+select * into #TempResult from B2CTransData
 union all
 select * from TransferData
 union all
 select * from CreditCardData
 union all
-select
-	N'终端接入' as BizCategory,
-	NULL as MerchantNo,
-	NULL as MerchantName,
-	NULL as TransAmt,
-	NULL as TransCnt,
-	NULL as FeeAmt,
-	NULL as CostAmt,
-	NULL as InstuFeeAmt
+select * from otherTransSum
 union all
-select * from notwithGateNoData
-union all
-select * from withGateNoData
+select * from DomesticSum
 union all
 select * from FinanceOraTransData;
+
+Update 
+	#TempResult
+Set
+	CostAmt = (100000000.0 * TransAmt) * 0.0025
+where	
+	UpdateFlag = N'B2C网银(境内)';
+	
+Update 
+	#TempResult
+Set
+	CostAmt = (10000.0 * TransCnt) * 5.0
+where	
+	UpdateFlag = N'B2B';
+	
+Update 
+	#TempResult
+Set
+	CostAmt = (10000.0 * TransCnt) * 0.7
+where	
+	UpdateFlag = N'代收付';
+
+select
+	BizOrder.OrderID,
+	BizOrder.BizCategory,
+	TempResult.MerchantNo,
+	TempResult.MerchantName,
+	TempResult.TransAmt,
+	TempResult.TransCnt,
+	TempResult.FeeAmt,
+	TempResult.CostAmt,
+	TempResult.InstuFeeAmt
+from
+	#BizOrder BizOrder
+	left join
+	#TempResult TempResult
+	on
+		BizOrder.BizCategory = TempResult.BizCategory;
 	
 --5.Drop Temp Table
+Drop table #BizOrder;
 Drop table #ProcResult;
 Drop table #ProcOraCost;
 Drop table #OraTransData;
+Drop table #TempResult;
+
 End
