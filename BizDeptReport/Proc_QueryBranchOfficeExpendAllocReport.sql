@@ -1,5 +1,6 @@
 --[Created] At 20120618 By 王红燕:分公司业务费用配置报表(境外数据已转为人民币数据)
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
+--[Modified] At 20130422 By 王红燕：Modify Cost Calc Format
 if OBJECT_ID(N'Proc_QueryBranchOfficeExpendAllocReport', N'P') is not null
 begin
 	drop procedure Proc_QueryBranchOfficeExpendAllocReport;
@@ -7,8 +8,8 @@ end
 go
 
 create procedure Proc_QueryBranchOfficeExpendAllocReport
-	@StartDate datetime = '2012-01-01',
-	@EndDate datetime = '2012-02-29'
+	@StartDate datetime = '2013-01-01',
+	@EndDate datetime = '2013-03-31'
 as
 begin
 
@@ -23,8 +24,8 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
-declare @HisRefDate datetime;
-set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
+--declare @HisRefDate datetime;
+--set @HisRefDate = DATEADD(DAY, -1, DATEADD(YEAR, DATEDIFF(YEAR, 0, @CurrStartDate), 0));
 
 --1. Get Branch Office Merchant List
 select
@@ -56,36 +57,42 @@ create table #PayProcData
 insert into 
 	#PayProcData
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,@HisRefDate,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 
 --2.2 Get Branch Mer Ora Trans Data
-create table #ProcOraCost
-(
-	BankSettingID char(10) not null,
-	MerchantNo char(20) not null,
-	CPDate datetime not null,
-	TransCnt bigint not null,
-	TransAmt bigint not null,
-	CostAmt decimal(15,4) not null
-);
-insert into 
-	#ProcOraCost
-exec 
-	Proc_CalOraCost @CurrStartDate,@CurrEndDate,@HisRefDate;
+--create table #ProcOraCost
+--(
+--	BankSettingID char(10) not null,
+--	MerchantNo char(20) not null,
+--	CPDate datetime not null,
+--	TransCnt bigint not null,
+--	TransAmt bigint not null,
+--	CostAmt decimal(15,4) not null
+--);
+--insert into 
+--	#ProcOraCost
+--exec 
+--	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
 	
-With OraFee as
+With OraTransData as
 (
 	select
+		N'代付交易' as BizCategory,
+		3 as OrderID,
 		BranchMer.InstuName,
 		BranchMer.MerchantNo,
-		SUM(Ora.FeeAmount)/100.0 FeeAmt
+		(select MerchantName from Table_OraMerchants where MerchantNo = BranchMer.MerchantNo) MerchantName,
+		SUM(Ora.TransAmount)/100.0 TransAmt,
+		SUM(Ora.TransCount) TransCnt,
+		0.7*SUM(Ora.TransCount) CostAmt,
+		SUM(Ora.FeeAmount)/100.0 FeeAmt,
+		0 as InstuFeeAmt
 	from
 		Table_OraTransSum Ora
 		inner join
 		#BranchMer BranchMer
 		on
-			Ora.MerchantNo = BranchMer.MerchantNo
-		
+			Ora.MerchantNo = BranchMer.MerchantNo		
 	where
 		Ora.CPDate >= @CurrStartDate
 		and
@@ -93,46 +100,6 @@ With OraFee as
 	group by
 		BranchMer.InstuName,
 		BranchMer.MerchantNo
-),
-OraCost as
-(
-	select
-		BranchMer.InstuName,
-		BranchMer.MerchantNo,
-		SUM(Ora.TransCnt) TransCnt,
-		SUM(Ora.TransAmt)/100.0 TransAmt,
-		SUM(Ora.CostAmt)/100.0 CostAmt
-	from
-		#ProcOraCost Ora
-		inner join
-		#BranchMer BranchMer
-		on
-			Ora.MerchantNo = BranchMer.MerchantNo
-	group by
-		BranchMer.InstuName,
-		BranchMer.MerchantNo
-),
-OraTransData as
-(
-	select
-		N'代付交易' as BizCategory,
-		3 as OrderID,
-		OraCost.InstuName,
-		OraCost.MerchantNo,
-		(select MerchantName from Table_OraMerchants where MerchantNo = OraCost.MerchantNo) MerchantName,
-		OraCost.TransAmt,
-		OraCost.TransCnt,
-		OraCost.CostAmt,
-		OraFee.FeeAmt,
-		0 as InstuFeeAmt
-	from
-		OraCost
-		inner join
-		OraFee
-		on
-			OraCost.InstuName = OraFee.InstuName
-			and
-			OraCost.MerchantNo = OraFee.MerchantNo
 ),
 BranchTrans as
 (
@@ -165,11 +132,11 @@ B2BTrans as
 		InstuName,
 		MerchantNo,
 		(select MerchantName from Table_MerInfo where MerchantNo = BranchTrans.MerchantNo) MerchantName,
-		SUM(TransCnt) TransCnt,
 		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		5.0*SUM(TransCnt) CostAmt,
 		SUM(FeeAmt) FeeAmt,
-		SUM(InstuFeeAmt) InstuFeeAmt,
-		SUM(CostAmt) CostAmt
+		SUM(InstuFeeAmt) InstuFeeAmt
 	from
 		BranchTrans
 	where
@@ -187,11 +154,11 @@ DeductTrans as
 		InstuName,
 		MerchantNo,
 		(select MerchantName from Table_MerInfo where MerchantNo = BranchTrans.MerchantNo) MerchantName,
-		SUM(TransCnt) TransCnt,
 		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		0.7*SUM(TransCnt) CostAmt,
 		SUM(FeeAmt) FeeAmt,
-		SUM(InstuFeeAmt) InstuFeeAmt,
-		SUM(CostAmt) CostAmt
+		SUM(InstuFeeAmt) InstuFeeAmt
 	from
 		BranchTrans
 	where
@@ -204,26 +171,119 @@ DeductTrans as
 B2CTrans as
 (
 	select
-		N'B2C交易' as BizCategory,
-		0 as OrderID,
 		InstuName,
 		MerchantNo,
-		(select MerchantName from Table_MerInfo where MerchantNo = BranchTrans.MerchantNo) MerchantName,
-		SUM(TransCnt) TransCnt,
-		SUM(TransAmt) TransAmt,
-		SUM(FeeAmt) FeeAmt,
-		SUM(InstuFeeAmt) InstuFeeAmt,
-		SUM(CostAmt) CostAmt
+		GateNo,
+		TransCnt,
+		TransAmt,
+		FeeAmt,
+		InstuFeeAmt,
+		CostAmt
 	from
 		BranchTrans
 	where
 		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in ('B2B',N'代扣'))
+),
+DomesticTrans as
+(
+	select
+		N'B2C网银(境内)' as BizCategory,
+		0 as OrderID,
+		InstuName,
+		MerchantNo,
+		(select MerchantName from Table_MerInfo where MerchantNo = B2CTrans.MerchantNo) MerchantName,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	from
+		B2CTrans
+	where
+		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in ('EPOS','UPOP'))
+		and
+		GateNo not in ('5901','5902')
+		and
+		MerchantNo not in (select distinct MerchantNo from Table_MerInfoExt)
 	group by
 		InstuName,
 		MerchantNo
+	union all
+	select
+		N'B2C网银(境内)' as BizCategory,
+		0 as OrderID,
+		InstuName,
+		MerchantNo,
+		(select MerchantName from Table_MerInfo where MerchantNo = B2CTrans.MerchantNo) MerchantName,
+		SUM(TransAmt) TransAmt,
+		SUM(TransCnt) TransCnt,
+		SUM(CostAmt) CostAmt,
+		SUM(FeeAmt) FeeAmt,
+		SUM(InstuFeeAmt) InstuFeeAmt
+	from
+		B2CTrans
+	where
+		GateNo in (select GateNo from Table_GateCategory where GateCategory1 in ('EPOS')) 
+		and
+		MerchantNo in (select MerchantNo from Table_EposTakeoffMerchant)
+		and
+		MerchantNo not in (select distinct MerchantNo from Table_MerInfoExt)
+	group by
+		InstuName,
+		MerchantNo
+),
+OtherB2CTrans as
+(
+	select
+		N'B2C交易' as BizCategory,
+		0 as OrderID,
+		AllTrans.InstuName,
+		AllTrans.MerchantNo,
+		(select MerchantName from Table_MerInfo where MerchantNo = AllTrans.MerchantNo) MerchantName,
+		(AllTrans.TransAmt - ISNULL(DomeTrans.TransAmt, 0)) TransAmt,
+		(AllTrans.TransCnt - ISNULL(DomeTrans.TransCnt, 0)) TransCnt,
+		(AllTrans.CostAmt - ISNULL(DomeTrans.CostAmt, 0)) CostAmt,
+		(AllTrans.FeeAmt - ISNULL(DomeTrans.FeeAmt, 0)) FeeAmt,
+		(AllTrans.InstuFeeAmt - ISNULL(DomeTrans.InstuFeeAmt, 0)) InstuFeeAmt
+	from
+		(select
+			InstuName,
+			MerchantNo,
+			SUM(TransAmt) TransAmt,
+			SUM(TransCnt) TransCnt,
+			SUM(CostAmt) CostAmt,
+			SUM(FeeAmt) FeeAmt,
+			SUM(InstuFeeAmt) InstuFeeAmt
+		 from
+			B2CTrans
+		 group by
+			InstuName,
+			MerchantNo
+		)AllTrans
+		left join
+		(select
+			InstuName,
+			MerchantNo,
+			SUM(TransAmt) TransAmt,
+			SUM(TransCnt) TransCnt,
+			SUM(CostAmt) CostAmt,
+			SUM(FeeAmt) FeeAmt,
+			SUM(InstuFeeAmt) InstuFeeAmt
+		 from
+			DomesticTrans
+		 group by
+			InstuName,
+			MerchantNo
+		)DomeTrans
+		on
+			AllTrans.InstuName = DomeTrans.InstuName
+			and
+			AllTrans.MerchantNo = DomeTrans.MerchantNo
 )
 --3.0 Join All Trans Data
-select * from B2CTrans
+select * into #Result from DomesticTrans
+union all
+select * from OtherB2CTrans
 union all
 select * from B2BTrans
 union all
@@ -231,9 +291,38 @@ select * from DeductTrans
 union all
 select * from OraTransData;
 
+Update 
+	#Result
+Set
+	BizCategory = N'B2C交易',
+	CostAmt = TransAmt * 0.0025
+where	
+	BizCategory = N'B2C网银(境内)';
+	
+select
+	BizCategory,
+	OrderID,
+	InstuName,
+	MerchantNo,
+	MerchantName,
+	SUM(TransAmt) TransAmt,
+	SUM(TransCnt) TransCnt,
+	SUM(CostAmt) CostAmt,
+	SUM(FeeAmt) FeeAmt,
+	SUM(InstuFeeAmt) InstuFeeAmt
+from
+	#Result
+group by
+	BizCategory,
+	OrderID,
+	InstuName,
+	MerchantNo,
+	MerchantName
+order by
+	OrderID;
+
 --4.0 Drop Temp table
 Drop Table #BranchMer;	
 Drop Table #PayProcData;
-Drop Table #ProcOraCost;
-
+Drop table #Result;
 End
