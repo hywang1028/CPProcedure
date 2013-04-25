@@ -1,13 +1,13 @@
 --[Created] At 20120530 By 王红燕:金融考核报表之银行成本降低额明细表(境外数据已转为人民币数据)
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 --[Modified] At 20130419 By 王红燕：Modify Reference Cost to Standard Cost
-if OBJECT_ID(N'Proc_QueryFinancialCostReduceReport', N'P') is not null
+if OBJECT_ID(N'Proc_QueryFinancialAllGateCostReport', N'P') is not null
 begin
-	drop procedure Proc_QueryFinancialCostReduceReport;
+	drop procedure Proc_QueryFinancialAllGateCostReport;
 end
 go
 
-create procedure Proc_QueryFinancialCostReduceReport
+create procedure Proc_QueryFinancialAllGateCostReport
 	@StartDate datetime = '2013-01-01',
 	@EndDate datetime = '2013-03-31'
 as
@@ -16,7 +16,7 @@ begin
 --1. Check input
 if (@StartDate is null or @EndDate is null)
 begin
-	raiserror(N'Input params cannot be empty in Proc_QueryFinancialCostReduceReport', 16, 1);
+	raiserror(N'Input params cannot be empty in Proc_QueryFinancialAllGateCostReport', 16, 1);
 end
 
 --2. Prepare StartDate and EndDate
@@ -269,6 +269,8 @@ AllTransData as
 	select * from DomesticTrans
 	union all
 	select * from OutsideTrans
+	union all
+	select * from OtherB2CTrans
 ),
 GateCostData as 
 (
@@ -286,7 +288,7 @@ GateCostData as
 			 then Convert(decimal(15,4),TransAmt) * 0.0025
 			 when GateCategory = N'B2C网银(境外)'
 			 then CostAmt 
-			 End as StdCostAmt
+			 Else NULL End as StdCostAmt
 	from
 		(
 			select
@@ -319,24 +321,29 @@ select
 	GateCost.TransAmt,
 	GateCost.TransCnt,
 	GateCost.ActCostAmt,
-	case when GateCost.GateCategory in (N'B2B',N'代收付')
-	     then case when GateCost.TransCnt = 0 
-				   then 0
-				   Else GateCost.ActCostAmt/GateCost.TransCnt End
-		 Else case when GateCost.TransAmt = 0 
-				   then 0
-				   Else GateCost.ActCostAmt/GateCost.TransAmt End
-	End as ActCostRatio,
+	--case when GateCost.GateCategory in (N'B2B',N'代收付')
+	--     then case when GateCost.TransCnt = 0 
+	--			   then 0
+	--			   Else GateCost.ActCostAmt/GateCost.TransCnt End
+	--	 Else case when GateCost.TransAmt = 0 
+	--			   then 0
+	--			   Else GateCost.ActCostAmt/GateCost.TransAmt End
+	--End as ActCostRatio,
 	GateCost.StdCostAmt,
-	case when GateCost.GateCategory in (N'B2B',N'代收付')
-	     then case when GateCost.TransCnt = 0 
-				 then 0
-				 Else GateCost.StdCostAmt/GateCost.TransCnt End
-	     Else case when GateCost.TransAmt = 0 
-				 then 0
-				 Else GateCost.StdCostAmt/GateCost.TransAmt End
-	End as StdCostRatio,
-	(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt) as CostReduce,
+	--case when GateCost.StdCostAmt is null 
+	--	 then NULL
+	--	 Else case when GateCost.GateCategory in (N'B2B',N'代收付')
+	--			   then case when GateCost.TransCnt = 0 
+	--						 then 0
+	--						 Else GateCost.StdCostAmt/GateCost.TransCnt End
+	--			   Else case when GateCost.TransAmt = 0 
+	--						 then 0
+	--						 Else GateCost.StdCostAmt/GateCost.TransAmt End
+	--End End as StdCostRatio,
+	case when GateCost.StdCostAmt is null 
+		 then NULL
+		 Else (ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt) 
+	End as CostReduce,
 	(select StdCostAmt from StdCostSum) as StdCostSum
 from
 	GateCostData GateCost
@@ -350,8 +357,6 @@ from
 		GateCost.GateNo = Ora.BankSettingID
 where
 	GateCost.GateNo <> '0044/0045'
-	and
-	(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt) <> 0
 order by
 	GateCost.GateNo;
 	
