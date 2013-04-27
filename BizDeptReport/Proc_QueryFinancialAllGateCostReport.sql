@@ -1,13 +1,13 @@
 --[Created] At 20120530 By 王红燕:金融考核报表之银行成本降低额明细表(境外数据已转为人民币数据)
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 --[Modified] At 20130419 By 王红燕：Modify Reference Cost to Standard Cost
-if OBJECT_ID(N'Proc_QueryFinancialCostReduceReport', N'P') is not null
+if OBJECT_ID(N'Proc_QueryFinancialAllGateCostReport', N'P') is not null
 begin
-	drop procedure Proc_QueryFinancialCostReduceReport;
+	drop procedure Proc_QueryFinancialAllGateCostReport;
 end
 go
 
-create procedure Proc_QueryFinancialCostReduceReport
+create procedure Proc_QueryFinancialAllGateCostReport
 	@StartDate datetime = '2013-01-01',
 	@EndDate datetime = '2013-03-31'
 as
@@ -16,7 +16,7 @@ begin
 --1. Check input
 if (@StartDate is null or @EndDate is null)
 begin
-	raiserror(N'Input params cannot be empty in Proc_QueryFinancialCostReduceReport', 16, 1);
+	raiserror(N'Input params cannot be empty in Proc_QueryFinancialAllGateCostReport', 16, 1);
 end
 
 --2. Prepare StartDate and EndDate
@@ -27,6 +27,32 @@ set @CurrEndDate = DATEADD(day,1,@EndDate);
 --declare @HisRefDate datetime;
 --set @HisRefDate = DATEADD(DAY, -1, '2012-01-01');
 
+exec xprcFile '
+GateNo
+0044
+0045
+5131
+5132
+5604
+5606
+7012
+7013
+7015
+7018
+7022
+7024
+7025
+7507
+8614
+9021
+'
+select
+	*
+into
+	#TakeOffGateNo
+from
+	xlsContainer;
+	
 --3. Prepare Trans Data
 create table #ActualPayCost
 (
@@ -271,6 +297,8 @@ AllTransData as
 	select * from DomesticTrans
 	union all
 	select * from OutsideTrans
+	union all
+	select * from OtherB2CTrans
 ),
 GateCostData as 
 (
@@ -287,8 +315,8 @@ GateCostData as
 			 when GateCategory in (N'B2C网银(境内)',N'基金(支付)' ) 
 			 then Convert(decimal,TransAmt) * 0.0025
 			 when GateCategory = N'B2C网银(境外)'
-			 then CostAmt 
-			 End as StdCostAmt
+			 then Convert(decimal,CostAmt) 
+			 Else NULL End as StdCostAmt
 	from
 		(
 			select
@@ -310,6 +338,15 @@ StdCostSum as
 		Convert(decimal,SUM(ISNULL(StdCostAmt,0)))/100.0 as StdCostAmt
 	from
 		GateCostData
+),
+StdCostRatio as
+(
+	select	distinct
+		GateNo
+	from
+		GateCostData
+	where
+		GateCategory = N'B2C网银(境内)'
 )
 select
 	GateCost.GateNo,
@@ -320,23 +357,27 @@ select
 		 Else 0 End as Flag,
 	Convert(decimal,GateCost.TransAmt)/100.0 as TransAmt,
 	GateCost.TransCnt,
-	Convert(decimal,GateCost.ActCostAmt)/100.0 as ActCostAmt,
-	case when GateCost.GateCategory in (N'B2B',N'代收付')
-	     then case when GateCost.TransCnt = 0 
-				   then 0
-				   Else (Convert(decimal,GateCost.ActCostAmt)/100.0)/(GateCost.TransCnt) End
-		 Else case when GateCost.TransAmt = 0 
-				   then 0
-				   Else GateCost.ActCostAmt/GateCost.TransAmt End
+	case when NoCostGate.GateNo is not null
+		 then 0 
+		 Else Convert(decimal,GateCost.ActCostAmt)/100.0 End as ActCostAmt,
+	case when NoCostGate.GateNo is not null
+		 then N'无实际成本规则' 
 	End as ActCostRatio,
 	Convert(decimal,GateCost.StdCostAmt)/100.0 as StdCostAmt,
 	case when GateCost.GateCategory in (N'代收付')
 		 then 0.7
 		 when GateCost.GateCategory in (N'B2B')
 		 then 5.0
-		 Else 0.0025
+		 when StdCostRatio.GateNo is not null
+		 then 0.0025
+		 Else GateCost.StdCostAmt/GateCost.TransAmt
 	End as StdCostRatio,
-	Convert(decimal,(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt))/100.0 as CostReduce,
+	case when NoCostGate.GateNo is not null
+		 then 0 
+		 when GateCost.StdCostAmt is null 
+		 then NULL
+		 Else Convert(decimal,(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt))/100.0
+	End as CostReduce,
 	(select StdCostAmt from StdCostSum) as StdCostSum
 from
 	GateCostData GateCost
@@ -348,15 +389,21 @@ from
 	Table_OraBankSetting Ora
 	on
 		GateCost.GateNo = Ora.BankSettingID
-where
-	GateCost.GateNo not in ('0044','0045','5131','5132','5604','5606','7012','7013','7015','7018',
-				'7022','7024','7025','7507','8614','9021')
-	and
-	(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt) <> 0
+	left join
+	#TakeOffGateNo NoCostGate
+	on
+		GateCost.GateNo = NoCostGate.GateNo
+	left join
+	StdCostRatio
+	on	
+		GateCost.GateNo = StdCostRatio.GateNo
+--where
+--	GateCost.GateNo <> '0044/0045'
 order by
 	GateCost.GateNo;
 	
 --4.Drop table
 Drop table #ActualPayCost;
 Drop table #ActualOraCost;
+Drop table #TakeOffGateNo;
 End

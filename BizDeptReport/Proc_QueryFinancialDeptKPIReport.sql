@@ -296,6 +296,10 @@ OtherPayTrans as
 			AllTrans.MerchantNo = DomeTrans.MerchantNo
 			and
 			AllTrans.GateNo = DomeTrans.GateNo
+	where
+		(AllTrans.TransAmt - ISNULL(DomeTrans.TransAmt, 0)) <> 0
+		or
+		(AllTrans.TransCnt - ISNULL(DomeTrans.TransCnt, 0)) <> 0
 ),
 otherTransDetail as
 (
@@ -487,17 +491,22 @@ select
 	BizOrder.BizCategory,
 	TempResult.MerchantNo,
 	TempResult.MerchantName,
-	TempResult.TransAmt,
-	TempResult.TransCnt,
-	TempResult.FeeAmt,
-	TempResult.CostAmt,
-	TempResult.InstuFeeAmt
+	SUM(TempResult.TransAmt) TransAmt,
+	SUM(TempResult.TransCnt) TransCnt,
+	SUM(TempResult.FeeAmt) FeeAmt,
+	SUM(TempResult.CostAmt) CostAmt,
+	SUM(TempResult.InstuFeeAmt) InstuFeeAmt
 from
 	#BizOrder BizOrder
 	left join
 	#TempResult TempResult
 	on
-		BizOrder.BizCategory = TempResult.BizCategory;
+		BizOrder.BizCategory = TempResult.BizCategory
+group by
+	BizOrder.OrderID,
+	BizOrder.BizCategory,
+	TempResult.MerchantNo,
+	TempResult.MerchantName;
 	
 --5.Drop Temp Table
 Drop table #BizOrder;
