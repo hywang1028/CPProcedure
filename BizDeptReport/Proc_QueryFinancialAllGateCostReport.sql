@@ -27,6 +27,32 @@ set @CurrEndDate = DATEADD(day,1,@EndDate);
 --declare @HisRefDate datetime;
 --set @HisRefDate = DATEADD(DAY, -1, '2012-01-01');
 
+exec xprcFile '
+GateNo
+0044
+0045
+5131
+5132
+5604
+5606
+7012
+7013
+7015
+7018
+7022
+7024
+7025
+7507
+8614
+9021
+'
+select
+	*
+into
+	#TakeOffGateNo
+from
+	xlsContainer;
+	
 --3. Prepare Trans Data
 create table #ActualPayCost
 (
@@ -64,9 +90,9 @@ With ActualPayCost as
 		Pay.GateNo,
 		ISNULL(Gate.GateCategory1, N'B2C') as GateCategory,
 		Pay.MerchantNo,
-		Convert(decimal,SUM(Pay.TransSumAmount))/100 TransAmt,
+		Convert(decimal,SUM(Pay.TransSumAmount)) TransAmt,
 		Convert(decimal,SUM(Pay.TransSumCount)) TransCnt,
-		Convert(decimal,SUM(Pay.Cost))/100 CostAmt
+		Convert(decimal,SUM(Pay.Cost)) CostAmt
 	from 
 		#ActualPayCost Pay
 		Left join
@@ -83,9 +109,9 @@ ActualOraCost as
 	select 
 		BankSettingID as GateNo,
 		N'代收付' as GateCategory,
-		Convert(decimal,SUM(TransAmt))/100.0 TransAmt,
+		Convert(decimal,SUM(TransAmt)) TransAmt,
 		Convert(decimal,SUM(TransCnt)) TransCnt,
-		Convert(decimal,SUM(CostAmt))/100.0 CostAmt
+		Convert(decimal,SUM(CostAmt)) CostAmt
 	from 
 		#ActualOraCost
 	group by
@@ -125,11 +151,11 @@ B2BTransData as
 FundPayData as
 (
 	select
-		N'0044/0045' as GateNo,
+		GateNo,
 		N'基金(支付)' as GateCategory,
-		SUM(SucceedTransAmount)/100.0 as TransAmt,
+		SUM(SucceedTransAmount) as TransAmt,
 		SUM(SucceedTransCount) as TransCnt,
-		0.0025*SUM(SucceedTransAmount)/100.0 as CostAmt
+		0 as CostAmt
 	from
 		FactDailyTrans
 	where
@@ -138,6 +164,8 @@ FundPayData as
 		DailyTransDate < @CurrEndDate
 		and
 		GateNo in ('0044','0045')
+	group by
+		GateNo
 ),
 --3.6 Prepare B2C Trans Data
 B2CAllTrans as
@@ -171,20 +199,20 @@ B2CNetBankTrans as
 		GateCategory not in ('EPOS','UPOP')
 		and
 		GateNo not in ('5901','5902')
-	union all
-	select
-		GateNo,
-		MerchantNo,
-		N'B2C网银' as GateCategory,
-		TransAmt,
-		TransCnt,
-		CostAmt
-	from
-		B2CAllTrans
-	where
-		GateCategory in ('EPOS') 
-		and
-		MerchantNo in (select MerchantNo from Table_EposTakeoffMerchant)
+	--union all
+	--select
+	--	GateNo,
+	--	MerchantNo,
+	--	N'B2C网银' as GateCategory,
+	--	TransAmt,
+	--	TransCnt,
+	--	CostAmt
+	--from
+	--	B2CAllTrans
+	--where
+	--	GateCategory in ('EPOS') 
+	--	and
+	--	MerchantNo in (select MerchantNo from Table_EposTakeoffMerchant)
 ),
 DomesticTrans as
 (
@@ -281,13 +309,13 @@ GateCostData as
 		TransCnt,
 		CostAmt as ActCostAmt,
 		case when GateCategory = N'B2B' 
-			 then TransCnt * 5.0
+			 then TransCnt * 500
 			 when GateCategory = N'代收付' 
-			 then TransCnt * 0.7
+			 then TransCnt * 70
 			 when GateCategory in (N'B2C网银(境内)',N'基金(支付)' ) 
-			 then Convert(decimal(15,4),TransAmt) * 0.0025
+			 then Convert(decimal,TransAmt) * 0.0025
 			 when GateCategory = N'B2C网银(境外)'
-			 then CostAmt 
+			 then Convert(decimal,CostAmt) 
 			 Else NULL End as StdCostAmt
 	from
 		(
@@ -307,9 +335,18 @@ GateCostData as
 StdCostSum as
 (
 	select
-		SUM(ISNULL(StdCostAmt,0)) StdCostAmt
+		Convert(decimal,SUM(ISNULL(StdCostAmt,0)))/100.0 as StdCostAmt
 	from
 		GateCostData
+),
+StdCostRatio as
+(
+	select	distinct
+		GateNo
+	from
+		GateCostData
+	where
+		GateCategory = N'B2C网银(境内)'
 )
 select
 	GateCost.GateNo,
@@ -318,31 +355,28 @@ select
 	case when GateCost.GateCategory in (N'B2B',N'代收付')
 		 then 1 
 		 Else 0 End as Flag,
-	GateCost.TransAmt,
+	Convert(decimal,GateCost.TransAmt)/100.0 as TransAmt,
 	GateCost.TransCnt,
-	GateCost.ActCostAmt,
-	--case when GateCost.GateCategory in (N'B2B',N'代收付')
-	--     then case when GateCost.TransCnt = 0 
-	--			   then 0
-	--			   Else GateCost.ActCostAmt/GateCost.TransCnt End
-	--	 Else case when GateCost.TransAmt = 0 
-	--			   then 0
-	--			   Else GateCost.ActCostAmt/GateCost.TransAmt End
-	--End as ActCostRatio,
-	GateCost.StdCostAmt,
-	--case when GateCost.StdCostAmt is null 
-	--	 then NULL
-	--	 Else case when GateCost.GateCategory in (N'B2B',N'代收付')
-	--			   then case when GateCost.TransCnt = 0 
-	--						 then 0
-	--						 Else GateCost.StdCostAmt/GateCost.TransCnt End
-	--			   Else case when GateCost.TransAmt = 0 
-	--						 then 0
-	--						 Else GateCost.StdCostAmt/GateCost.TransAmt End
-	--End End as StdCostRatio,
-	case when GateCost.StdCostAmt is null 
+	case when NoCostGate.GateNo is not null
+		 then 0 
+		 Else Convert(decimal,GateCost.ActCostAmt)/100.0 End as ActCostAmt,
+	case when NoCostGate.GateNo is not null
+		 then N'无实际成本规则' 
+	End as ActCostRatio,
+	Convert(decimal,GateCost.StdCostAmt)/100.0 as StdCostAmt,
+	case when GateCost.GateCategory in (N'代收付')
+		 then 0.7
+		 when GateCost.GateCategory in (N'B2B')
+		 then 5.0
+		 when StdCostRatio.GateNo is not null
+		 then 0.0025
+		 Else GateCost.StdCostAmt/GateCost.TransAmt
+	End as StdCostRatio,
+	case when NoCostGate.GateNo is not null
+		 then 0 
+		 when GateCost.StdCostAmt is null 
 		 then NULL
-		 Else (ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt) 
+		 Else Convert(decimal,(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt))/100.0
 	End as CostReduce,
 	(select StdCostAmt from StdCostSum) as StdCostSum
 from
@@ -355,12 +389,21 @@ from
 	Table_OraBankSetting Ora
 	on
 		GateCost.GateNo = Ora.BankSettingID
-where
-	GateCost.GateNo <> '0044/0045'
+	left join
+	#TakeOffGateNo NoCostGate
+	on
+		GateCost.GateNo = NoCostGate.GateNo
+	left join
+	StdCostRatio
+	on	
+		GateCost.GateNo = StdCostRatio.GateNo
+--where
+--	GateCost.GateNo <> '0044/0045'
 order by
 	GateCost.GateNo;
 	
 --4.Drop table
 Drop table #ActualPayCost;
 Drop table #ActualOraCost;
+Drop table #TakeOffGateNo;
 End
