@@ -1,3 +1,4 @@
+--[Modified] on 2013-05-10 By ¶¡¿¡ê» Description:Add West Union Trans Data
 if OBJECT_ID(N'Proc_QueryNewReceiptAndORATransReport',N'p')is not null
 begin
 	drop procedure Proc_QueryNewReceiptAndORATransReport
@@ -60,10 +61,10 @@ select
 	(select MerchantName from Table_TraMerchantInfo where MerchantNo = s.MerchantNo) as MerchantName,
 	s.ChannelNo,
 	(select ChannelName from Table_TraChannelConfig where ChannelNo = s.ChannelNo) as ChannelName,
-	sum(s.TotalCnt) as TotalCnt,
-	sum(s.TotalAmt)/100 as TotalAmt,
-	sum(s.SucceedCnt) as SucceedCnt,
-	sum(s.SucceedAmt)/100 as SucceedAmt
+	sum(s.CalFeeAmt)/100.0 as CalAmt,
+	sum(s.CalCostCnt) as CalCnt,
+	sum(s.FeeAmt)/100.0 as FeeAmt,
+	sum(s.CostAmt)/100.0 as CostAmt
 from
 	Table_TraScreenSum s
 where
