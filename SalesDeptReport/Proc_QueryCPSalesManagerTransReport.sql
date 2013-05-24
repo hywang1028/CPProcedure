@@ -1,4 +1,5 @@
 --[Modified] on 2012-06-08 By ÍõºìÑà Description:Add West Union Trans Data
+--[Modified] on 2013-05-16 By ¶¡¿¡ê» Description:Add FeeAmt Data and UPOP Data
 if OBJECT_ID(N'Proc_QueryCPSalesManagerTransReport', N'P') is not null
 begin
 	drop procedure Proc_QueryCPSalesManagerTransReport;
@@ -7,7 +8,7 @@ go
 
 create procedure Proc_QueryCPSalesManagerTransReport
 	@StartDate datetime = '2012-01-01',
-	@PeriodUnit nchar(4) = N'ÔÂ',
+	@PeriodUnit nchar(4) = N'×Ô¶¨Òå',
 	@EndDate datetime = '2012-02-29'
 as
 begin
@@ -17,6 +18,7 @@ if (@StartDate is null or ISNULL(@PeriodUnit, N'') = N'' or (@PeriodUnit = N'×Ô¶
 begin
 	raiserror(N'Input params cannot be empty in Proc_QueryCPSalesManagerTransReport', 16, 1);
 end
+
 
 --2. Prepare StartDate and EndDate
 declare @CurrStartDate datetime;
@@ -86,252 +88,543 @@ end
 set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01';
 set @ThisYearRunningEndDate = @CurrEndDate;
 
---3. Get Current Data
-With CurrCMCData as
-(
-	select
-		MerchantNo,
-		SUM(SucceedTransCount) as CurrSucceedCount,
-		SUM(SucceedTransAmount) as CurrSucceedAmount
-	from
-		FactDailyTrans
-	where
-		DailyTransDate >= @CurrStartDate
-		and
-		DailyTransDate < @CurrEndDate
-	group by
-		MerchantNo
-),
-CurrORAData as
-(
-	select
-		MerchantNo,
-		SUM(Table_OraTransSum.TransCount) as CurrSucceedCount,
-		SUM(Table_OraTransSum.TransAmount) as CurrSucceedAmount
-	from
-		dbo.Table_OraTransSum
-	where
-		Table_OraTransSum.CPDate >= @CurrStartDate
-		and
-		Table_OraTransSum.CPDate < @CurrEndDate
-	group by
-		MerchantNo
-),
-CurrWUData as
-(
-	select
-		MerchantNo,
-		COUNT(DestTransAmount) as CurrSucceedCount,
-		SUM(DestTransAmount) as CurrSucceedAmount
-	from
-		dbo.Table_WUTransLog
-	where
-		CPDate >= @CurrStartDate
-		and
-		CPDate < @CurrEndDate
-	group by
-		MerchantNo
-)
+--3. Get #CurrCMCData
 select
-	coalesce(CurrCMCData.MerchantNo, CurrORAData.MerchantNo) MerchantNo,
-	ISNULL(CurrCMCData.CurrSucceedCount, 0) + ISNULL(CurrORAData.CurrSucceedCount, 0) CurrSucceedCount,
-	ISNULL(CurrCMCData.CurrSucceedAmount, 0) + ISNULL(CurrORAData.CurrSucceedAmount, 0) CurrSucceedAmount
+	MerchantNo,
+	SUM(PurCnt) as CurrSucceedCount,
+	SUM(PurAmt) as CurrSucceedAmount,
+	SUM(FeeAmt) as CurrFeeAmt
+into
+	#CurrCMCData
+from
+	Table_FeeCalcResult
+where
+	FeeEndDate >= @CurrStartDate
+	and
+	FeeEndDate < @CurrEndDate
+group by
+	MerchantNo;
+
+
+--3.1 Get #CurrORAData
+select
+	BankSettingID,
+	MerchantNo,
+	TransCount,
+	FeeAmount
+into
+	#ORADataC
+from
+	Table_OraTransSum
+where
+	CPDate >= @CurrStartDate
+	and
+	CPDate < @CurrEndDate;
+
+update
+	ORAFee
+set
+	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
+from
+	#ORADataC ORAFee
+	inner join
+	Table_OraAdditionalFeeRule AdditionalRule
+	on
+		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
+
+select
+	MerchantNo,
+	SUM(TransCount) as CurrSucceedCount,
+	SUM(TransAmount) as CurrSucceedAmount,
+	(select SUM(#ORADataC.FeeAmount) from #ORADataC where MerchantNo = Table_OraTransSum.MerchantNo) CurrFeeAmt
+into
+	#CurrORAData
+from
+	Table_OraTransSum
+where
+	CPDate >= @CurrStartDate
+	and
+	CPDate < @CurrEndDate
+group by
+	MerchantNo;
+
+
+--3.2 Get #CurrWUData
+select
+	MerchantNo,
+	COUNT(DestTransAmount) as CurrSucceedCount,
+	SUM(DestTransAmount) as CurrSucceedAmount,
+	0 as CurrFeeAmt
+into
+	#CurrWUData
+from
+	dbo.Table_WUTransLog
+where
+	CPDate >= @CurrStartDate
+	and
+	CPDate < @CurrEndDate
+group by
+	MerchantNo;
+
+
+--3.3 Get #UPOPData
+select 
+	Mer.CPMerchantNo,
+	SUM(UPOP.PurCnt) PurCnt,
+	SUM(UPOP.PurAmt) PurAmt,
+	SUM(UPOP.FeeAmt) FeeAmt
+into
+	#UPOPData
+from
+	Table_UpopliqMerInfo Mer
+	left join
+	Table_UpopliqFeeLiqResult UPOP
+	on
+		Mer.MerchantNo = UPOP.MerchantNo
+where
+	TransDate >= @CurrStartDate
+	and
+	TransDate < @CurrEndDate
+group by
+	Mer.CPMerchantNo
+
+
+--3.4 Curr All Data (#CurrData)
+select
+	coalesce(CurrCMCData.MerchantNo, CurrORAData.MerchantNo,UPOPData.CPMerchantNo) MerchantNo,
+	ISNULL(CurrCMCData.CurrSucceedCount, 0) + ISNULL(CurrORAData.CurrSucceedCount, 0) + ISNULL(UPOPData.PurCnt, 0) CurrSucceedCount,
+	ISNULL(CurrCMCData.CurrSucceedAmount, 0) + ISNULL(CurrORAData.CurrSucceedAmount, 0) + ISNULL(UPOPData.PurAmt, 0) CurrSucceedAmount,
+	case when 
+		Sales.Channel = 'CP'
+	then
+		ISNULL(CurrCMCData.CurrFeeAmt, 0) + ISNULL(CurrORAData.CurrFeeAmt, 0) + ISNULL(UPOPData.FeeAmt, 0)
+	else
+		0.0
+	end
+		CurrFeeAmt
 into
 	#CurrData
 from
-	CurrCMCData
+	#CurrCMCData CurrCMCData
 	full outer join
-	CurrORAData
+	#CurrORAData CurrORAData
 	on
 		CurrCMCData.MerchantNo = CurrORAData.MerchantNo
+	full outer join
+	#UPOPData UPOPData
+	on
+		UPOPData.CPMerchantNo = coalesce(CurrCMCData.MerchantNo, CurrORAData.MerchantNo)
+	right join
+	Table_SalesDeptConfiguration Sales
+	on
+		Sales.MerchantNo = Coalesce(UPOPData.CPMerchantNo,CurrCMCData.MerchantNo, CurrORAData.MerchantNo)
 union all
-select * from CurrWUData;
-		
---4. Get Previous Data
-With PrevCMCData as
-(
-	select
-		MerchantNo,
-		SUM(SucceedTransCount) as PrevSucceedCount,
-		SUM(SucceedTransAmount) as PrevSucceedAmount
-	from
-		FactDailyTrans
-	where
-		DailyTransDate >= @PrevStartDate
-		and
-		DailyTransDate < @PrevEndDate
-	group by
-		MerchantNo
-),
-PrevORAData as
-(
-	select
-		MerchantNo,
-		SUM(Table_OraTransSum.TransCount) as PrevSucceedCount,
-		SUM(Table_OraTransSum.TransAmount) as PrevSucceedAmount
-	from
-		dbo.Table_OraTransSum
-	where
-		Table_OraTransSum.CPDate >= @PrevStartDate
-		and
-		Table_OraTransSum.CPDate < @PrevEndDate
-	group by
-		MerchantNo
-),
-PrevWUData as
-(
-	select
-		MerchantNo,
-		COUNT(DestTransAmount) as CurrSucceedCount,
-		SUM(DestTransAmount) as CurrSucceedAmount
-	from
-		dbo.Table_WUTransLog
-	where
-		CPDate >= @PrevStartDate
-		and
-		CPDate < @PrevEndDate
-	group by
-		MerchantNo
-)
+select * from #CurrWUData;
+
+
+--4. Get #PrevCMCData
 select
-	coalesce(PrevCMCData.MerchantNo, PrevORAData.MerchantNo) MerchantNo,
-	ISNULL(PrevCMCData.PrevSucceedCount, 0) + ISNULL(PrevORAData.PrevSucceedCount, 0) PrevSucceedCount,
-	ISNULL(PrevCMCData.PrevSucceedAmount, 0) + ISNULL(PrevORAData.PrevSucceedAmount, 0) PrevSucceedAmount
+	MerchantNo,
+	SUM(PurCnt) as PrevSucceedCount,
+	SUM(PurAmt) as PrevSucceedAmount,
+	SUM(FeeAmt) as PrevFeeAmt
+into
+	#PrevCMCData
+from
+	Table_FeeCalcResult
+where
+	FeeEndDate >= @PrevStartDate
+	and
+	FeeEndDate < @PrevEndDate
+group by
+	MerchantNo;
+
+
+--4.1 Get #PrevORAData
+select
+	BankSettingID,
+	MerchantNo,
+	TransCount,
+	FeeAmount
+into
+	#ORADataP
+from
+	Table_OraTransSum
+where
+	CPDate >= @PrevStartDate
+	and
+	CPDate < @PrevEndDate;
+
+update
+	ORAFee
+set
+	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
+from
+	#ORADataP ORAFee
+	inner join
+	Table_OraAdditionalFeeRule AdditionalRule
+	on
+		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
+
+select
+	MerchantNo,
+	SUM(TransCount) as PrevSucceedCount,
+	SUM(TransAmount) as PrevSucceedAmount,
+	(select SUM(#ORADataP.FeeAmount) from #ORADataP where MerchantNo = Table_OraTransSum.MerchantNo) PrevFeeAmt
+into
+	#PrevORAData
+from
+	Table_OraTransSum
+where
+	CPDate >= @PrevStartDate
+	and
+	CPDate < @PrevEndDate
+group by
+	MerchantNo;
+
+
+--4.2 Get #PrevWUData
+select
+	MerchantNo,
+	COUNT(DestTransAmount) as PrevSucceedCount,
+	SUM(DestTransAmount) as PrevSucceedAmount,
+	0 as PrevFeeAmt
+into
+	#PrevWUData
+from
+	dbo.Table_WUTransLog
+where
+	CPDate >= @PrevStartDate
+	and
+	CPDate < @PrevEndDate
+group by
+	MerchantNo;
+
+
+--4.3 Get #PrevUPOPData
+select 
+	Mer.CPMerchantNo,
+	SUM(UPOP.PurCnt) PurCnt,
+	SUM(UPOP.PurAmt) PurAmt,
+	SUM(UPOP.FeeAmt) FeeAmt
+into
+	#PrevUPOPData
+from
+	Table_UpopliqMerInfo Mer
+	left join
+	Table_UpopliqFeeLiqResult UPOP
+	on
+		Mer.MerchantNo = UPOP.MerchantNo
+where
+	TransDate >= @PrevStartDate
+	and
+	TransDate < @PrevEndDate
+group by
+	Mer.CPMerchantNo;
+
+
+--4.4 Prev All Data
+select
+	coalesce(PrevCMCData.MerchantNo, PrevORAData.MerchantNo,PervUPOPData.CPMerchantNo) MerchantNo,
+	ISNULL(PrevCMCData.PrevSucceedCount, 0) + ISNULL(PrevORAData.PrevSucceedCount, 0) + ISNULL(PervUPOPData.PurCnt, 0) PrevSucceedCount,
+	ISNULL(PrevCMCData.PrevSucceedAmount, 0) + ISNULL(PrevORAData.PrevSucceedAmount, 0) + ISNULL(PervUPOPData.PurAmt, 0) PrevSucceedAmount,
+	case when
+		Sales.Channel = 'CP'
+	then
+		ISNULL(PrevCMCData.PrevFeeAmt, 0) + ISNULL(PrevORAData.PrevFeeAmt, 0) + ISNULL(PervUPOPData.FeeAmt, 0) 
+	else
+		0.0
+	end
+		PrevFeeAmt
 into
 	#PrevData
 from
-	PrevCMCData
+	#PrevCMCData PrevCMCData
 	full outer join
-	PrevORAData
+	#PrevORAData PrevORAData
 	on
 		PrevCMCData.MerchantNo = PrevORAData.MerchantNo
+	full outer join
+	#PrevUPOPData PervUPOPData
+	on
+		PervUPOPData.CPMerchantNo = coalesce(PrevCMCData.MerchantNo, PrevORAData.MerchantNo)
+	right join
+	Table_SalesDeptConfiguration Sales
+	on
+		Sales.MerchantNo = COALESCE(PervUPOPData.CPMerchantNo,PrevCMCData.MerchantNo,PrevORAData.MerchantNo)
 union all
-select * from PrevWUData;
+select * from #PrevWUData;
 		
---5. Get LastYear Data
-With LastYearCMCData as
-(
-	select
-		MerchantNo,
-		SUM(SucceedTransCount) as LastYearSucceedCount,
-		SUM(SucceedTransAmount) as LastYearSucceedAmount
-	from
-		FactDailyTrans
-	where
-		DailyTransDate >= @LastYearStartDate
-		and
-		DailyTransDate < @LastYearEndDate
-	group by
-		MerchantNo
-),
-LastYearORAData as
-(
-	select
-		MerchantNo,
-		SUM(Table_OraTransSum.TransCount) as LastYearSucceedCount,
-		SUM(Table_OraTransSum.TransAmount) as LastYearSucceedAmount	
-	from
-		dbo.Table_OraTransSum
-	where
-		Table_OraTransSum.CPDate >= @LastYearStartDate
-		and
-		Table_OraTransSum.CPDate < @LastYearEndDate
-	group by
-		MerchantNo
-),
-LastYearWUData as
-(
-	select
-		MerchantNo,
-		COUNT(DestTransAmount) as CurrSucceedCount,
-		SUM(DestTransAmount) as CurrSucceedAmount
-	from
-		dbo.Table_WUTransLog
-	where
-		CPDate >= @LastYearStartDate
-		and
-		CPDate < @LastYearEndDate
-	group by
-		MerchantNo
-)
+
+--5. Get #LastYearCMCData
 select
-	coalesce(LastYearCMCData.MerchantNo, LastYearORAData.MerchantNo) MerchantNo,
-	ISNULL(LastYearCMCData.LastYearSucceedCount, 0) + ISNULL(LastYearORAData.LastYearSucceedCount, 0) LastYearSucceedCount,
-	ISNULL(LastYearCMCData.LastYearSucceedAmount, 0) + ISNULL(LastYearORAData.LastYearSucceedAmount, 0) LastYearSucceedAmount
+	MerchantNo,
+	SUM(PurCnt) as LastYearSucceedCount,
+	SUM(PurAmt) as LastYearSucceedAmount,
+	SUM(FeeAmt) as LastYearFeeAmt
+into
+	#LastYearCMCData
+from
+	Table_FeeCalcResult
+where
+	FeeEndDate >= @LastYearStartDate
+	and
+	FeeEndDate < @LastYearEndDate
+group by
+	MerchantNo;
+
+
+--5.1 Get #LastYearORAData
+select
+	BankSettingID,
+	MerchantNo,
+	TransCount,
+	FeeAmount
+into
+	#ORADataL
+from
+	Table_OraTransSum
+where
+	CPDate >= @LastYearStartDate
+	and
+	CPDate < @LastYearEndDate;
+
+update
+	ORAFee
+set
+	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
+from
+	#ORADataL ORAFee
+	inner join
+	Table_OraAdditionalFeeRule AdditionalRule
+	on
+		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
+
+select
+	MerchantNo,
+	SUM(TransCount) as LastYearSucceedCount,
+	SUM(TransAmount) as LastYearSucceedAmount,
+	(select SUM(#ORADataL.FeeAmount) from #ORADataL where MerchantNo = Table_OraTransSum.MerchantNo) LastYearFeeAmt
+into
+	#LastYearORAData
+from
+	Table_OraTransSum
+where
+	CPDate >= @LastYearStartDate
+	and
+	CPDate < @LastYearEndDate
+group by
+	MerchantNo;
+
+
+--5.2 Get #LastYearWUData
+select
+	MerchantNo,
+	COUNT(DestTransAmount) as LastYearSucceedCount,
+	SUM(DestTransAmount) as LastYearSucceedAmount,
+	0 as LastYearFeeAmt
+into
+	#LastYearWUData
+from
+	dbo.Table_WUTransLog
+where
+	CPDate >= @LastYearStartDate
+	and
+	CPDate < @LastYearEndDate
+group by
+	MerchantNo;
+
+
+--5.3 Get #LastYearUPOPData
+select 
+	Mer.CPMerchantNo,
+	SUM(UPOP.PurCnt) PurCnt,
+	SUM(UPOP.PurAmt) PurAmt,
+	SUM(UPOP.FeeAmt) FeeAmt
+into
+	#LastYearUPOPData
+from
+	Table_UpopliqMerInfo Mer
+	left join
+	Table_UpopliqFeeLiqResult UPOP
+	on
+		Mer.MerchantNo = UPOP.MerchantNo
+where
+	TransDate >= @LastYearStartDate
+	and
+	TransDate < @LastYearEndDate
+group by
+	Mer.CPMerchantNo
+	
+
+--5.4 LastYear All Data
+select
+	coalesce(LastYearCMCData.MerchantNo, LastYearORAData.MerchantNo,LastYearUPOPData.CPMerchantNo) MerchantNo,
+	ISNULL(LastYearCMCData.LastYearSucceedCount, 0) + ISNULL(LastYearORAData.LastYearSucceedCount, 0) + ISNULL(LastYearUPOPData.PurCnt, 0) LastYearSucceedCount,
+	ISNULL(LastYearCMCData.LastYearSucceedAmount, 0) + ISNULL(LastYearORAData.LastYearSucceedAmount, 0) + ISNULL(LastYearUPOPData.PurAmt, 0) LastYearSucceedAmount,
+	case when
+		Sales.Channel = 'CP'
+	then
+		ISNULL(LastYearCMCData.LastYearFeeAmt, 0) + ISNULL(LastYearORAData.LastYearFeeAmt, 0) + ISNULL(LastYearUPOPData.FeeAmt, 0) 
+	else
+		0.0
+	end
+		LastYearFeeAmt
 into
 	#LastYearData
 from
-	LastYearCMCData
+	#LastYearCMCData LastYearCMCData
 	full outer join
-	LastYearORAData
+	#LastYearORAData LastYearORAData
 	on
 		LastYearCMCData.MerchantNo = LastYearORAData.MerchantNo
+	full outer join
+	#LastYearUPOPData LastYearUPOPData
+	on
+		LastYearUPOPData.CPMerchantNo = coalesce(LastYearCMCData.MerchantNo, LastYearORAData.MerchantNo)
+	right join
+	Table_SalesDeptConfiguration Sales
+	on
+		Sales.MerchantNo = COALESCE(LastYearUPOPData.CPMerchantNo,LastYearCMCData.MerchantNo, LastYearORAData.MerchantNo)
 union all
-select * from LastYearWUData;
+select * from #LastYearWUData;
 
---5. Get This Year Running Data
-With ThisYearCMCData as
-(
-	select
-		MerchantNo,
-		SUM(SucceedTransCount) as ThisYearSucceedCount,
-		SUM(SucceedTransAmount) as ThisYearSucceedAmount
-	from
-		FactDailyTrans
-	where
-		DailyTransDate >= @ThisYearRunningStartDate
-		and
-		DailyTransDate < @ThisYearRunningEndDate
-	group by
-		MerchantNo
-),
-ThisYearORAData as
-(
-	select
-		MerchantNo,
-		SUM(Table_OraTransSum.TransCount) as ThisYearSucceedCount,
-		SUM(Table_OraTransSum.TransAmount) as ThisYearSucceedAmount	
-	from
-		dbo.Table_OraTransSum
-	where
-		CPDate >= @ThisYearRunningStartDate
-		and
-		CPDate < @ThisYearRunningEndDate
-	group by
-		MerchantNo
-),
-ThisYearWUData as
-(
-	select
-		MerchantNo,
-		COUNT(DestTransAmount) as CurrSucceedCount,
-		SUM(DestTransAmount) as CurrSucceedAmount
-	from
-		dbo.Table_WUTransLog
-	where
-		CPDate >= @ThisYearRunningStartDate
-		and
-		CPDate < @ThisYearRunningEndDate
-	group by
-		MerchantNo
-)
+
+--6. Get #ThisYearCMCData
 select
-	coalesce(ThisYearCMCData.MerchantNo, ThisYearORAData.MerchantNo) MerchantNo,
-	ISNULL(ThisYearCMCData.ThisYearSucceedCount, 0) + ISNULL(ThisYearORAData.ThisYearSucceedCount, 0) ThisYearSucceedCount,
-	ISNULL(ThisYearCMCData.ThisYearSucceedAmount, 0) + ISNULL(ThisYearORAData.ThisYearSucceedAmount, 0) ThisYearSucceedAmount
+	MerchantNo,
+	SUM(PurCnt) as ThisYearSucceedCount,
+	SUM(PurAmt) as ThisYearSucceedAmount,
+	SUM(FeeAmt) as ThisYearFeeAmt
+into
+	#ThisYearCMCData
+from
+	Table_FeeCalcResult
+where
+	FeeEndDate >= @ThisYearRunningStartDate
+	and
+	FeeEndDate < @ThisYearRunningEndDate
+group by
+	MerchantNo;
+
+
+--6.1 Get #ThisYearORAData
+select
+	BankSettingID,
+	MerchantNo,
+	TransCount,
+	FeeAmount
+into
+	#ORADataT
+from
+	Table_OraTransSum
+where
+	CPDate >= @ThisYearRunningStartDate
+	and
+	CPDate < @ThisYearRunningEndDate;
+
+update
+	ORAFee
+set
+	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
+from
+	#ORADataT ORAFee
+	inner join
+	Table_OraAdditionalFeeRule AdditionalRule
+	on
+		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
+
+select
+	MerchantNo,
+	SUM(TransCount) as ThisYearSucceedCount,
+	SUM(TransAmount) as ThisYearSucceedAmount,
+	(select SUM(#ORADataT.FeeAmount) from #ORADataT where MerchantNo = Table_OraTransSum.MerchantNo) ThisYearFeeAmt
+into
+	#ThisYearORAData
+from
+	Table_OraTransSum
+where
+	CPDate >= @ThisYearRunningStartDate
+	and
+	CPDate < @ThisYearRunningEndDate
+group by
+	MerchantNo;
+
+
+--6.2 Get #ThisYearWUData
+select
+	MerchantNo,
+	COUNT(DestTransAmount) as ThisYearSucceedCount,
+	SUM(DestTransAmount) as ThisYearSucceedAmount,
+	0 as PrevFeeAmt
+into
+	#ThisYearWUData
+from
+	dbo.Table_WUTransLog
+where
+	CPDate >= @ThisYearRunningStartDate
+	and
+	CPDate < @ThisYearRunningEndDate
+group by
+	MerchantNo;
+
+
+--6.3 Get #ThisYearUPOPData
+select 
+	Mer.CPMerchantNo,
+	SUM(UPOP.PurCnt) PurCnt,
+	SUM(UPOP.PurAmt) PurAmt,
+	SUM(UPOP.FeeAmt) FeeAmt
+into
+	#ThisYearUPOPData
+from
+	Table_UpopliqMerInfo Mer
+	left join
+	Table_UpopliqFeeLiqResult UPOP
+	on
+		Mer.MerchantNo = UPOP.MerchantNo
+where
+	TransDate >= @ThisYearRunningStartDate
+	and
+	TransDate < @ThisYearRunningEndDate
+group by
+	Mer.CPMerchantNo;
+
+
+--6.4 ThisYear All Data
+select
+	coalesce(ThisYearCMCData.MerchantNo, ThisYearORAData.MerchantNo,ThisYearUPOPData.CPMerchantNo) MerchantNo,
+	ISNULL(ThisYearCMCData.ThisYearSucceedCount, 0) + ISNULL(ThisYearORAData.ThisYearSucceedCount, 0) + ISNULL(ThisYearUPOPData.PurCnt, 0) ThisYearSucceedCount,
+	ISNULL(ThisYearCMCData.ThisYearSucceedAmount, 0) + ISNULL(ThisYearORAData.ThisYearSucceedAmount, 0) + ISNULL(ThisYearUPOPData.PurAmt, 0) ThisYearSucceedAmount,
+	case when
+		Sales.Channel = 'CP'
+	then
+		ISNULL(ThisYearCMCData.ThisYearFeeAmt, 0) + ISNULL(ThisYearORAData.ThisYearFeeAmt, 0) + ISNULL(ThisYearUPOPData.FeeAmt, 0)
+	else
+		0.0
+	end
+		ThisYearFeeAmt
 into
 	#ThisYearData
 from
-	ThisYearCMCData
+	#ThisYearCMCData ThisYearCMCData
 	full outer join
-	ThisYearORAData
+	#ThisYearORAData ThisYearORAData
 	on
 		ThisYearCMCData.MerchantNo = ThisYearORAData.MerchantNo
+	full outer join
+	#ThisYearUPOPData ThisYearUPOPData
+	on
+		ThisYearUPOPData.CPMerchantNo = coalesce(ThisYearCMCData.MerchantNo,ThisYearORAData.MerchantNo)
+	right join
+	Table_SalesDeptConfiguration Sales
+	on
+		Sales.MerchantNo = Coalesce(ThisYearUPOPData.CPMerchantNo,ThisYearCMCData.MerchantNo,ThisYearORAData.MerchantNo)
 union all
-select * from ThisYearWUData;
-			
---6. Get Result
---6.1 Convert Currency Rate
+select * from #ThisYearWUData;
+
+
+--7. Convert Currency Rate
 update
 	CD
 set
@@ -375,7 +668,8 @@ from
 	Table_SalesCurrencyRate CR
 	on
 		TYD.MerchantNo = CR.MerchantNo;
-		
+
+
 --6.2 Get Final Result
 With SalesManagerTransData as
 (
@@ -393,7 +687,19 @@ With SalesManagerTransData as
 		case when ISNULL(SUM(LastYear.LastYearSucceedAmount), 0) = 0
 			then 0
 			else CONVERT(decimal, ISNULL(SUM(Curr.CurrSucceedAmount), 0) - ISNULL(SUM(LastYear.LastYearSucceedAmount), 0))/SUM(LastYear.LastYearSucceedAmount)
-		end YOYAmountIncrementRatio
+		end YOYAmountIncrementRatio,
+		Convert(decimal,ISNULL(SUM(Curr.CurrFeeAmt),0))/100.0 as CurrFeeAmt,
+		Convert(decimal,ISNULL(SUM(Prev.PrevFeeAmt),0))/100.0 as PrevFeeAmt,
+		Convert(decimal,ISNULL(SUM(LastYear.LastYearFeeAmt),0))/100.0 as LastYearFeeAmt,
+		Convert(decimal,ISNULL(SUM(ThisYear.ThisYearFeeAmt),0))/100.0 as ThisYearFeeAmt,
+		case when ISNULL(SUM(Prev.PrevFeeAmt), 0) = 0
+			then 0
+			else CONVERT(decimal, ISNULL(SUM(Curr.CurrFeeAmt), 0) - ISNULL(SUM(Prev.PrevFeeAmt), 0))/SUM(Prev.PrevFeeAmt)
+		end SeqFeeAmtIncrementRatio,
+		case when ISNULL(SUM(LastYear.LastYearFeeAmt), 0) = 0
+			then 0
+			else CONVERT(decimal, ISNULL(SUM(Curr.CurrFeeAmt), 0) - ISNULL(SUM(LastYear.LastYearFeeAmt), 0))/SUM(LastYear.LastYearFeeAmt)
+		end YOYFeeAmtIncrementRatio
 	from
 		Table_SalesDeptConfiguration Sales
 		left join
@@ -414,23 +720,67 @@ With SalesManagerTransData as
 			Sales.MerchantNo = ThisYear.MerchantNo
 	group by
 		Sales.SalesManager
+),
+SumFee as 
+(
+	select
+		EmpName,
+		SUM(FeeAmt) FeeAmt
+	from
+		Table_SalesProjectFee
+	where
+		TransDate >= @CurrStartDate
+		and
+		TransDate < @CurrEndDate
+	group by
+		EmpName
 )
 select
 	ISNULL(KPIData.BizUnit,N'ÆäËû') BizUnit,
-	case when KPIData.BizUnit <> N'ÆäËû' then 0 else 1 End as OrderID,
+	case when 
+		KPIData.BizUnit = 'ÇøÓò' 
+	then 1 
+	when KPIData.BizUnit = 'Ö±Ïú-ÉÌ»§Î¬»¤' 
+	then 2 
+	when KPIData.BizUnit = 'Ö±Ïú-¾³ÄÚ' 
+	then 3 
+	when KPIData.BizUnit = 'Ö±Ïú-¾³Íâ' 
+	then 4 
+	when KPIData.BizUnit = 'Æ½Ì¨-ÉÌÂÃ' 
+	then 5 
+	when KPIData.BizUnit = 'Æ½Ì¨-±ãÃñ' 
+	then 6  
+	when KPIData.BizUnit = 'Æ½Ì¨-ÉÌ³Ç' 
+	then 7 
+	when KPIData.BizUnit = 'ÆäËû-ÊÐ³¡ÏúÊÛ²¿' 
+	then 8 
+	else 9 
+	end as OrderID,
 	coalesce(KPIData.EmpName,Sales.SalesManager) SalesManager,
-	ISNULL(KPIData.KPIValue,0)/100 KPIValue,
+	ISNULL(KPIData.KPIValue,0)/100 as KPIValue,
 	case when ISNULL(KPIData.KPIValue,0) = 0 
 		 then 0
 		 else 100*ISNULL(Sales.ThisYearSucceedAmount,0)/KPIData.KPIValue
 	end Achievement,
+	ISNULL(KPIData.FeeKPI,0)/100 as FeeKPI,
+	case when ISNULL(KPIData.FeeKPI,0) = 0
+	     then 0 
+	     else ISNULL(( 100*ISNULL(Sales.ThisYearFeeAmt,0) + SumFee.FeeAmt)/KPIData.FeeKPI,0)
+	end AchievementFee,
 	ISNULL(Sales.CurrSucceedAmount,0) CurrSucceedAmount,
 	ISNULL(Sales.CurrSucceedCount,0) CurrSucceedCount,
 	ISNULL(Sales.PrevSucceedAmount,0) PrevSucceedAmount,
 	ISNULL(Sales.LastYearSucceedAmount,0) LastYearSucceedAmount,
 	ISNULL(Sales.ThisYearSucceedAmount,0) ThisYearSucceedAmount,
 	ISNULL(Sales.SeqAmountIncrementRatio,0) SeqAmountIncrementRatio,
-	ISNULL(Sales.YOYAmountIncrementRatio,0) YOYAmountIncrementRatio
+	ISNULL(Sales.YOYAmountIncrementRatio,0) YOYAmountIncrementRatio,
+	ISNULL(Sales.CurrFeeAmt,0) CurrFeeAmt,
+	ISNULL(Sales.PrevFeeAmt,0) PrevFeeAmt,
+	ISNULL(Sales.LastYearFeeAmt,0) LastYearFeeAmt,
+	ISNULL(Sales.ThisYearFeeAmt,0) ThisYearFeeAmt,
+	ISNULL(SumFee.FeeAmt,0)/100.0 FeeAmt,
+	ISNULL(Sales.SeqFeeAmtIncrementRatio,0) SeqFeeAmtIncrementRatio,
+	ISNULL(Sales.YOYFeeAmtIncrementRatio,0) YOYFeeAmtIncrementRatio
 from
 	SalesManagerTransData Sales
 	full outer join
@@ -441,10 +791,18 @@ from
 	 where
 		PeriodStartDate >= @ThisYearRunningStartDate
 		and 
-		PeriodStartDate <  DateAdd(day,1,@ThisYearRunningEndDate)
+		PeriodStartDate <  @ThisYearRunningEndDate
 	)KPIData
 	on
-		Sales.SalesManager = KPIData.EmpName;
+		Sales.SalesManager = KPIData.EmpName
+	left join
+	SumFee
+	on
+		Sales.SalesManager = SumFee.EmpName
+order by 
+	OrderID,
+	BizUnit;
+
 
 --7. Clear temp table
 drop table #CurrData;
