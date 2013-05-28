@@ -73,6 +73,11 @@ With ActualPayCost as
 		Table_GateCategory Gate
 		on
 			Pay.GateNo = Gate.GateNo
+	where
+		Pay.GateNo not in ('0016','0018','0019','0024','0044','0045','0058','0086','1019','2008',
+			'3124','5003','5005','5009','5013','5015','5021','5022','5023','5026','5032','5131','5132',
+			'5424','5602','5603','5604','5606','5901','5902','7007','7009','7012','7013','7015','7018',
+			'7022','7024','7025','7033','7107','7207','7507','7517','8601','8604','8607','8610','8614','9021')
 	group by
 		Pay.GateNo,
 		ISNULL(Gate.GateCategory1, N'B2C'),
@@ -118,26 +123,6 @@ B2BTransData as
 		ActualPayCost
 	where
 		GateCategory = N'B2B'
-	group by
-		GateNo
-),
---3.5 Prepare Fund(Pay) Data
-FundPayData as
-(
-	select
-		GateNo,
-		N'»ù½ð(Ö§¸¶)' as GateCategory,
-		SUM(SucceedTransAmount) as TransAmt,
-		SUM(SucceedTransCount) as TransCnt,
-		0 as CostAmt
-	from
-		FactDailyTrans
-	where
-		DailyTransDate >= @CurrStartDate
-		and
-		DailyTransDate < @CurrEndDate
-		and
-		GateNo in ('0044','0045')
 	group by
 		GateNo
 ),
@@ -266,8 +251,6 @@ AllTransData as
 	union all
 	select * from B2BTransData
 	union all
-	select * from FundPayData
-	union all
 	select * from DomesticTrans
 	union all
 	select * from OutsideTrans
@@ -349,9 +332,6 @@ from
 	on
 		GateCost.GateNo = Ora.BankSettingID
 where
-	GateCost.GateNo not in ('0044','0045','5131','5132','5604','5606','7012','7013','7015','7018',
-				'7022','7024','7025','7507','8614','9021')
-	and
 	(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt) <> 0
 order by
 	GateCost.GateNo;

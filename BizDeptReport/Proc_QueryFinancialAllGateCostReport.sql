@@ -28,28 +28,63 @@ set @CurrEndDate = DATEADD(day,1,@EndDate);
 --set @HisRefDate = DATEADD(DAY, -1, '2012-01-01');
 
 exec xprcFile '
-GateNo
-0044
-0045
-5131
-5132
-5604
-5606
-7012
-7013
-7015
-7018
-7022
-7024
-7025
-7507
-8614
-9021
+GateNo	GateDesc	GateFlag
+0016	无标准	1
+0018	无标准	1
+0019	无标准	1
+0024	无标准	1
+0044	两者均无	2
+0045	两者均无	2
+0058	无标准	1
+0086	无标准	1
+1019	无标准	1
+2008	无标准	1
+3124	无标准	1
+5003	无标准	1
+5005	无标准	1
+5009	无标准	1
+5013	无标准	1
+5015	无标准	1
+5021	无标准	1
+5022	无标准	1
+5023	无标准	1
+5026	无标准	1
+5032	无标准	1
+5131	两者均无	2
+5132	两者均无	2
+5424	无标准	1
+5602	无标准	1
+5603	无标准	1
+5604	两者均无	2
+5606	两者均无	2
+5901	无标准	1
+5902	无标准	1
+7007	无标准	1
+7009	无标准	1
+7012	两者均无	2
+7013	两者均无	2
+7015	两者均无	2
+7018	两者均无	2
+7022	两者均无	2
+7024	两者均无	2
+7025	两者均无	2
+7033	无标准	1
+7107	无标准	1
+7207	无标准	1
+7507	两者均无	2
+7517	无标准	1
+8601	无标准	1
+8604	无标准	1
+8607	无标准	1
+8610	无标准	1
+8614	两者均无	2
+9021	两者均无	2
 '
+
 select
 	*
 into
-	#TakeOffGateNo
+	#SpecialGateNo
 from
 	xlsContainer;
 	
@@ -355,23 +390,28 @@ select
 	case when GateCost.GateCategory in (N'B2B',N'代收付')
 		 then 1 
 		 Else 0 End as Flag,
+	NoCostGate.GateDesc,
 	Convert(decimal,GateCost.TransAmt)/100.0 as TransAmt,
 	GateCost.TransCnt,
-	case when NoCostGate.GateNo is not null
+	case when NoCostGate.GateFlag = '2'
 		 then 0 
 		 Else Convert(decimal,GateCost.ActCostAmt)/100.0 End as ActCostAmt,
-	case when NoCostGate.GateNo is not null
+	case when NoCostGate.GateFlag = '2'
 		 then N'无实际成本规则' 
 	End as ActCostRatio,
-	Convert(decimal,GateCost.StdCostAmt)/100.0 as StdCostAmt,
-	case when GateCost.GateCategory in (N'代收付')
-		 then 0.7
-		 when GateCost.GateCategory in (N'B2B')
-		 then 5.0
-		 when StdCostRatio.GateNo is not null
-		 then 0.0025
-		 Else GateCost.StdCostAmt/GateCost.TransAmt
-	End as StdCostRatio,
+	case when NoCostGate.GateNo is not null
+		 then 0
+		 Else Convert(decimal,GateCost.StdCostAmt)/100.0 End as StdCostAmt,
+	case when NoCostGate.GateNo is not null
+		 then 0
+		 Else case when GateCost.GateCategory in (N'代收付')
+			       then 0.7
+				   when GateCost.GateCategory in (N'B2B')
+				   then 5.0
+				   when StdCostRatio.GateNo is not null
+				   then 0.0025
+				   Else GateCost.StdCostAmt/GateCost.TransAmt
+	End End as StdCostRatio,
 	case when NoCostGate.GateNo is not null
 		 then 0 
 		 when GateCost.StdCostAmt is null 
@@ -390,7 +430,7 @@ from
 	on
 		GateCost.GateNo = Ora.BankSettingID
 	left join
-	#TakeOffGateNo NoCostGate
+	#SpecialGateNo NoCostGate
 	on
 		GateCost.GateNo = NoCostGate.GateNo
 	left join
@@ -405,5 +445,5 @@ order by
 --4.Drop table
 Drop table #ActualPayCost;
 Drop table #ActualOraCost;
-Drop table #TakeOffGateNo;
+Drop table #SpecialGateNo;
 End
