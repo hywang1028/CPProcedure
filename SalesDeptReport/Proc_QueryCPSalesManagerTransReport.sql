@@ -668,7 +668,25 @@ from
 	Table_SalesCurrencyRate CR
 	on
 		TYD.MerchantNo = CR.MerchantNo;
+		
+--     declare @StartDate datetime;
+--declare @PeriodUnit nchar(4);
+--declare @EndDate datetime ;
+--declare @CurrStartDate datetime;
+--declare @CurrEndDate datetime;
+--declare @ThisYearRunningStartDate datetime;
+--declare @ThisYearRunningEndDate datetime;
+--set @StartDate = '2012-3-5';
+--set @PeriodUnit = N'自定义';
+--set @EndDate = '2012-12-31';
+--if(@PeriodUnit = N'自定义')
+--begin
+--    set @CurrStartDate = @StartDate;
+--    set @CurrEndDate = DateAdd(day,1,@EndDate);
+--end
 
+--set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01';
+--set @ThisYearRunningEndDate = @CurrEndDate;
 
 --6.2 Get Final Result
 With SalesManagerTransData as
@@ -725,13 +743,27 @@ SumFee as
 (
 	select
 		EmpName,
-		SUM(FeeAmt) FeeAmt
+		SUM(FeeAmt) EarlyFeeAmt
 	from
 		Table_SalesProjectFee
 	where
 		TransDate >= @CurrStartDate
 		and
 		TransDate < @CurrEndDate
+	group by
+		EmpName
+),
+ThisYearSumFee as 
+(
+	select
+		EmpName,
+		SUM(FeeAmt) ThisYearEarlyFeeAmt
+	from
+		Table_SalesProjectFee
+	where
+		TransDate >= @ThisYearRunningStartDate
+		and
+		TransDate < @ThisYearRunningEndDate
 	group by
 		EmpName
 )
@@ -765,7 +797,7 @@ select
 	ISNULL(KPIData.FeeKPI,0)/100 as FeeKPI,
 	case when ISNULL(KPIData.FeeKPI,0) = 0
 	     then 0 
-	     else ISNULL(( 100*ISNULL(Sales.ThisYearFeeAmt,0) + SumFee.FeeAmt)/KPIData.FeeKPI,0)
+	     else ISNULL((100*ISNULL(Sales.ThisYearFeeAmt,0) + ISNULL(ThisYearSumFee.ThisYearEarlyFeeAmt,0))/KPIData.FeeKPI,0)
 	end AchievementFee,
 	ISNULL(Sales.CurrSucceedAmount,0) CurrSucceedAmount,
 	ISNULL(Sales.CurrSucceedCount,0) CurrSucceedCount,
@@ -778,7 +810,8 @@ select
 	ISNULL(Sales.PrevFeeAmt,0) PrevFeeAmt,
 	ISNULL(Sales.LastYearFeeAmt,0) LastYearFeeAmt,
 	ISNULL(Sales.ThisYearFeeAmt,0) ThisYearFeeAmt,
-	ISNULL(SumFee.FeeAmt,0)/100.0 FeeAmt,
+	ISNULL(SumFee.EarlyFeeAmt,0)/100.0 as EarlyFeeAmt,
+	ISNULL(ThisYearSumFee.ThisYearEarlyFeeAmt,0)/100.0 as ThisYearEarlyFeeAmt,
 	ISNULL(Sales.SeqFeeAmtIncrementRatio,0) SeqFeeAmtIncrementRatio,
 	ISNULL(Sales.YOYFeeAmtIncrementRatio,0) YOYFeeAmtIncrementRatio
 from
@@ -799,6 +832,10 @@ from
 	SumFee
 	on
 		Sales.SalesManager = SumFee.EmpName
+	left join
+	ThisYearSumFee
+	on
+		Sales.SalesManager = ThisYearSumFee.EmpName
 order by 
 	OrderID,
 	BizUnit;
