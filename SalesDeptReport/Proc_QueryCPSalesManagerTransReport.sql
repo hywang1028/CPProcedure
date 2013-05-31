@@ -668,25 +668,7 @@ from
 	Table_SalesCurrencyRate CR
 	on
 		TYD.MerchantNo = CR.MerchantNo;
-		
---     declare @StartDate datetime;
---declare @PeriodUnit nchar(4);
---declare @EndDate datetime ;
---declare @CurrStartDate datetime;
---declare @CurrEndDate datetime;
---declare @ThisYearRunningStartDate datetime;
---declare @ThisYearRunningEndDate datetime;
---set @StartDate = '2012-3-5';
---set @PeriodUnit = N'自定义';
---set @EndDate = '2012-12-31';
---if(@PeriodUnit = N'自定义')
---begin
---    set @CurrStartDate = @StartDate;
---    set @CurrEndDate = DateAdd(day,1,@EndDate);
---end
 
---set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01';
---set @ThisYearRunningEndDate = @CurrEndDate;
 
 --6.2 Get Final Result
 With SalesManagerTransData as
