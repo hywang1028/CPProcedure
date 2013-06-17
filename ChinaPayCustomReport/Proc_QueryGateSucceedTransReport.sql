@@ -96,40 +96,40 @@ begin
 end
 
 --1. Get this period trade count/amount
-select
-	GateNo,
-	MerchantNo,
-	sum(SucceedTransCount) SumSucceedCount,
-	sum(SucceedTransAmount) SumSucceedAmount
-into
-	#CurrPayTrans
-from
-	FactDailyTrans
-where
-	DailyTransDate >= @CurrStartDate
-	and
-	DailyTransDate < @CurrEndDate
-group by
-	GateNo,
-	MerchantNo;
+select  
+	GateNo,  
+	MerchantNo,  
+	sum(SucceedTransCount) SumSucceedCount,  
+	sum(SucceedTransAmount) SumSucceedAmount  
+into  
+	#CurrPayTrans  
+from  
+	FactDailyTrans  
+where  
+	DailyTransDate >= @CurrStartDate  
+	and  
+	DailyTransDate < @CurrEndDate  
+group by  
+	GateNo,  
+	MerchantNo;  
 
-select
-	BankSettingID as GateNo,
-	MerchantNo,
-	sum(TransCount) SumSucceedCount,
-	sum(TransAmount) SumSucceedAmount
-into
-	#CurrOraTrans
-from
-	Table_OraTransSum
-where
-	CPDate >= @CurrStartDate
-	and
-	CPDate < @CurrEndDate
-group by
-	BankSettingID,
-	MerchantNo;
-	
+select  
+	BankSettingID as GateNo,  
+	MerchantNo,  
+	sum(TransCount) SumSucceedCount,  
+	sum(TransAmount) SumSucceedAmount  
+into  
+	#CurrOraTrans  
+from  
+	Table_OraTransSum  
+where  
+	CPDate >= @CurrStartDate  
+	and  
+	CPDate < @CurrEndDate  
+group by  
+	BankSettingID,  
+	MerchantNo;  
+
 --2. Get previous period trade count/amount
 select
 	GateNo,
@@ -222,12 +222,12 @@ begin
 		LastYearSumValue
 	)
 	select
-		N'Pay' as TypeName,
-		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,
-		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,
-		(Convert(Decimal,ISNULL(CurrTrans.SumSucceedAmount, 0))/1000000) CurrSumValue,
-		(Convert(Decimal,ISNULL(PrevTrans.SumSucceedAmount, 0))/1000000) PrevSumValue,
-		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedAmount, 0))/1000000) LastYearSumValue
+		N'Pay' as TypeName,  
+		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,  
+		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,  
+		(Convert(Decimal,ISNULL(CurrTrans.SumSucceedAmount, 0))/1000000) CurrSumValue,  
+		(Convert(Decimal,ISNULL(PrevTrans.SumSucceedAmount, 0))/1000000) PrevSumValue,  
+		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedAmount, 0))/1000000) LastYearSumValue  
 	from
 		#CurrPayTrans CurrTrans
 		full outer join
