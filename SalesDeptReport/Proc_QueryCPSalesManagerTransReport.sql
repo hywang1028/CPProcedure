@@ -1,5 +1,6 @@
 --[Modified] on 2012-06-08 By 王红燕 Description:Add West Union Trans Data
 --[Modified] on 2013-05-16 By 丁俊昊 Description:Add FeeAmt Data and UPOP Data
+--[Modified] on 2013-06-09 By 丁俊昊 Description:Modified Statistical Caliber and Limit OpenTime MerchantNo
 if OBJECT_ID(N'Proc_QueryCPSalesManagerTransReport', N'P') is not null
 begin
 	drop procedure Proc_QueryCPSalesManagerTransReport;
@@ -195,7 +196,7 @@ select
 	ISNULL(CurrCMCData.CurrSucceedCount, 0) + ISNULL(CurrORAData.CurrSucceedCount, 0) + ISNULL(UPOPData.PurCnt, 0) CurrSucceedCount,
 	ISNULL(CurrCMCData.CurrSucceedAmount, 0) + ISNULL(CurrORAData.CurrSucceedAmount, 0) + ISNULL(UPOPData.PurAmt, 0) CurrSucceedAmount,
 	case when 
-		Sales.Channel = 'CP'
+		Sales.MerchantClass in ('CP','CP-银联','CP-银商','EPOS')
 	then
 		ISNULL(CurrCMCData.CurrFeeAmt, 0) + ISNULL(CurrORAData.CurrFeeAmt, 0) + ISNULL(UPOPData.FeeAmt, 0)
 	else
@@ -217,9 +218,42 @@ from
 	right join
 	Table_SalesDeptConfiguration Sales
 	on
-		Sales.MerchantNo = Coalesce(UPOPData.CPMerchantNo,CurrCMCData.MerchantNo, CurrORAData.MerchantNo)
+		Sales.MerchantNo = coalesce(UPOPData.CPMerchantNo,CurrCMCData.MerchantNo, CurrORAData.MerchantNo)
 union all
 select * from #CurrWUData;
+
+
+--3.5 Get All TransAmt and LimitOpenTime FeeAmt
+with LimitData as
+(
+select
+	Table_MerInfo.MerchantNo,
+	CurrData.CurrFeeAmt,
+	Table_MerInfo.OpenTime
+from 
+	#CurrData CurrData
+	left join 
+	Table_MerInfo 
+	on 
+		CurrData.MerchantNo = Table_MerInfo.MerchantNo
+where
+	Table_MerInfo.OpenTime >= @CurrStartDate
+	and
+	Table_MerInfo.OpenTime < @CurrEndDate
+)
+select
+	CurrData.MerchantNo,
+	CurrData.CurrSucceedCount,
+	CurrData.CurrSucceedAmount,
+	LimitData.CurrFeeAmt
+into
+	#CurrLimitData
+from
+	#CurrData CurrData
+	left join
+	LimitData
+	on
+		CurrData.MerchantNo = LimitData.MerchantNo;
 
 
 --4. Get #PrevCMCData
@@ -329,7 +363,7 @@ select
 	ISNULL(PrevCMCData.PrevSucceedCount, 0) + ISNULL(PrevORAData.PrevSucceedCount, 0) + ISNULL(PervUPOPData.PurCnt, 0) PrevSucceedCount,
 	ISNULL(PrevCMCData.PrevSucceedAmount, 0) + ISNULL(PrevORAData.PrevSucceedAmount, 0) + ISNULL(PervUPOPData.PurAmt, 0) PrevSucceedAmount,
 	case when
-		Sales.Channel = 'CP'
+		Sales.MerchantClass in ('CP','CP-银联','CP-银商','EPOS')
 	then
 		ISNULL(PrevCMCData.PrevFeeAmt, 0) + ISNULL(PrevORAData.PrevFeeAmt, 0) + ISNULL(PervUPOPData.FeeAmt, 0) 
 	else
@@ -351,7 +385,7 @@ from
 	right join
 	Table_SalesDeptConfiguration Sales
 	on
-		Sales.MerchantNo = COALESCE(PervUPOPData.CPMerchantNo,PrevCMCData.MerchantNo,PrevORAData.MerchantNo)
+		Sales.MerchantNo = coalesce(PervUPOPData.CPMerchantNo,PrevCMCData.MerchantNo,PrevORAData.MerchantNo)
 union all
 select * from #PrevWUData;
 		
@@ -455,7 +489,7 @@ where
 	TransDate < @LastYearEndDate
 group by
 	Mer.CPMerchantNo
-	
+
 
 --5.4 LastYear All Data
 select
@@ -463,7 +497,7 @@ select
 	ISNULL(LastYearCMCData.LastYearSucceedCount, 0) + ISNULL(LastYearORAData.LastYearSucceedCount, 0) + ISNULL(LastYearUPOPData.PurCnt, 0) LastYearSucceedCount,
 	ISNULL(LastYearCMCData.LastYearSucceedAmount, 0) + ISNULL(LastYearORAData.LastYearSucceedAmount, 0) + ISNULL(LastYearUPOPData.PurAmt, 0) LastYearSucceedAmount,
 	case when
-		Sales.Channel = 'CP'
+		Sales.MerchantClass in ('CP','CP-银联','CP-银商','EPOS')
 	then
 		ISNULL(LastYearCMCData.LastYearFeeAmt, 0) + ISNULL(LastYearORAData.LastYearFeeAmt, 0) + ISNULL(LastYearUPOPData.FeeAmt, 0) 
 	else
@@ -485,9 +519,42 @@ from
 	right join
 	Table_SalesDeptConfiguration Sales
 	on
-		Sales.MerchantNo = COALESCE(LastYearUPOPData.CPMerchantNo,LastYearCMCData.MerchantNo, LastYearORAData.MerchantNo)
+		Sales.MerchantNo = coalesce(LastYearUPOPData.CPMerchantNo,LastYearCMCData.MerchantNo, LastYearORAData.MerchantNo)
 union all
 select * from #LastYearWUData;
+
+
+with LimitData as
+(
+select
+	Table_MerInfo.MerchantNo,
+	LastYearData.LastYearFeeAmt,
+	Table_MerInfo.OpenTime
+from 
+	#LastYearData LastYearData
+	left join 
+	Table_MerInfo 
+	on 
+		LastYearData.MerchantNo = Table_MerInfo.MerchantNo
+where
+	Table_MerInfo.OpenTime >= @LastYearStartDate
+	and
+	Table_MerInfo.OpenTime < @LastYearEndDate
+)
+select
+	LastYearData.MerchantNo,
+	LastYearData.LastYearSucceedCount,
+	LastYearData.LastYearSucceedAmount,
+	LimitData.LastYearFeeAmt
+into
+	#LastYearDataLimitData
+from
+	#LastYearData LastYearData
+	left join
+	LimitData
+	on
+		LastYearData.MerchantNo = LimitData.MerchantNo;
+
 
 
 --6. Get #ThisYearCMCData
@@ -597,7 +664,7 @@ select
 	ISNULL(ThisYearCMCData.ThisYearSucceedCount, 0) + ISNULL(ThisYearORAData.ThisYearSucceedCount, 0) + ISNULL(ThisYearUPOPData.PurCnt, 0) ThisYearSucceedCount,
 	ISNULL(ThisYearCMCData.ThisYearSucceedAmount, 0) + ISNULL(ThisYearORAData.ThisYearSucceedAmount, 0) + ISNULL(ThisYearUPOPData.PurAmt, 0) ThisYearSucceedAmount,
 	case when
-		Sales.Channel = 'CP'
+		Sales.MerchantClass in ('CP','CP-银联','CP-银商','EPOS')
 	then
 		ISNULL(ThisYearCMCData.ThisYearFeeAmt, 0) + ISNULL(ThisYearORAData.ThisYearFeeAmt, 0) + ISNULL(ThisYearUPOPData.FeeAmt, 0)
 	else
@@ -619,7 +686,7 @@ from
 	right join
 	Table_SalesDeptConfiguration Sales
 	on
-		Sales.MerchantNo = Coalesce(ThisYearUPOPData.CPMerchantNo,ThisYearCMCData.MerchantNo,ThisYearORAData.MerchantNo)
+		Sales.MerchantNo = coalesce(ThisYearUPOPData.CPMerchantNo,ThisYearCMCData.MerchantNo,ThisYearORAData.MerchantNo)
 union all
 select * from #ThisYearWUData;
 
@@ -630,7 +697,7 @@ update
 set
 	CD.CurrSucceedAmount = CD.CurrSucceedAmount * CR.CurrencyRate
 from
-	#CurrData CD
+	#CurrLimitData CD
 	inner join
 	Table_SalesCurrencyRate CR
 	on
@@ -652,7 +719,7 @@ update
 set
 	LYD.LastYearSucceedAmount = LYD.LastYearSucceedAmount * CR.CurrencyRate
 from
-	#LastYearData LYD
+	#LastYearDataLimitData LYD
 	inner join
 	Table_SalesCurrencyRate CR
 	on
@@ -675,45 +742,45 @@ With SalesManagerTransData as
 (
 	select
 		ISNULL(Sales.SalesManager,N'') SalesManager,
-		ISNULL(SUM(Curr.CurrSucceedCount),0) CurrSucceedCount,
-		Convert(decimal,ISNULL(SUM(Curr.CurrSucceedAmount),0))/100 CurrSucceedAmount,
+		ISNULL(SUM(CurrLimit.CurrSucceedCount),0) CurrSucceedCount,
+		Convert(decimal,ISNULL(SUM(CurrLimit.CurrSucceedAmount),0))/100 CurrSucceedAmount,
 		Convert(decimal,ISNULL(SUM(Prev.PrevSucceedAmount),0))/100 PrevSucceedAmount,
-		Convert(decimal,ISNULL(SUM(LastYear.LastYearSucceedAmount),0))/100 LastYearSucceedAmount,
+		Convert(decimal,ISNULL(SUM(LastYearLimit.LastYearSucceedAmount),0))/100 LastYearSucceedAmount,
 		Convert(decimal,ISNULL(SUM(ThisYear.ThisYearSucceedAmount),0))/100 ThisYearSucceedAmount,
 		case when ISNULL(SUM(Prev.PrevSucceedAmount), 0) = 0
 			then 0
-			else CONVERT(decimal, ISNULL(SUM(Curr.CurrSucceedAmount), 0) - ISNULL(SUM(Prev.PrevSucceedAmount), 0))/SUM(Prev.PrevSucceedAmount)
+			else CONVERT(decimal, ISNULL(SUM(CurrLimit.CurrSucceedAmount), 0) - ISNULL(SUM(Prev.PrevSucceedAmount), 0))/SUM(Prev.PrevSucceedAmount)
 		end SeqAmountIncrementRatio,
-		case when ISNULL(SUM(LastYear.LastYearSucceedAmount), 0) = 0
+		case when ISNULL(SUM(LastYearLimit.LastYearSucceedAmount), 0) = 0
 			then 0
-			else CONVERT(decimal, ISNULL(SUM(Curr.CurrSucceedAmount), 0) - ISNULL(SUM(LastYear.LastYearSucceedAmount), 0))/SUM(LastYear.LastYearSucceedAmount)
+			else CONVERT(decimal, ISNULL(SUM(CurrLimit.CurrSucceedAmount), 0) - ISNULL(SUM(LastYearLimit.LastYearSucceedAmount), 0))/SUM(LastYearLimit.LastYearSucceedAmount)
 		end YOYAmountIncrementRatio,
-		Convert(decimal,ISNULL(SUM(Curr.CurrFeeAmt),0))/100.0 as CurrFeeAmt,
+		Convert(decimal,ISNULL(SUM(CurrLimit.CurrFeeAmt),0))/100.0 as CurrFeeAmt,
 		Convert(decimal,ISNULL(SUM(Prev.PrevFeeAmt),0))/100.0 as PrevFeeAmt,
-		Convert(decimal,ISNULL(SUM(LastYear.LastYearFeeAmt),0))/100.0 as LastYearFeeAmt,
+		Convert(decimal,ISNULL(SUM(LastYearLimit.LastYearFeeAmt),0))/100.0 as LastYearFeeAmt,
 		Convert(decimal,ISNULL(SUM(ThisYear.ThisYearFeeAmt),0))/100.0 as ThisYearFeeAmt,
 		case when ISNULL(SUM(Prev.PrevFeeAmt), 0) = 0
 			then 0
-			else CONVERT(decimal, ISNULL(SUM(Curr.CurrFeeAmt), 0) - ISNULL(SUM(Prev.PrevFeeAmt), 0))/SUM(Prev.PrevFeeAmt)
+			else CONVERT(decimal, ISNULL(SUM(CurrLimit.CurrFeeAmt), 0) - ISNULL(SUM(Prev.PrevFeeAmt), 0))/SUM(Prev.PrevFeeAmt)
 		end SeqFeeAmtIncrementRatio,
-		case when ISNULL(SUM(LastYear.LastYearFeeAmt), 0) = 0
+		case when ISNULL(SUM(LastYearLimit.LastYearFeeAmt), 0) = 0
 			then 0
-			else CONVERT(decimal, ISNULL(SUM(Curr.CurrFeeAmt), 0) - ISNULL(SUM(LastYear.LastYearFeeAmt), 0))/SUM(LastYear.LastYearFeeAmt)
+			else CONVERT(decimal, ISNULL(SUM(CurrLimit.CurrFeeAmt), 0) - ISNULL(SUM(LastYearLimit.LastYearFeeAmt), 0))/SUM(LastYearLimit.LastYearFeeAmt)
 		end YOYFeeAmtIncrementRatio
 	from
 		Table_SalesDeptConfiguration Sales
 		left join
-		#CurrData Curr
+		#CurrLimitData CurrLimit
 		on
-			Sales.MerchantNo = Curr.MerchantNo
+			Sales.MerchantNo = CurrLimit.MerchantNo
 		left join
 		#PrevData Prev
 		on
 			Sales.MerchantNo = Prev.MerchantNo
 		left join
-		#LastYearData LastYear
+		#LastYearDataLimitData LastYearLimit
 		on
-			Sales.MerchantNo = LastYear.MerchantNo
+			Sales.MerchantNo = LastYearLimit.MerchantNo
 		left join
 		#ThisYearData ThisYear
 		on
@@ -825,8 +892,10 @@ order by
 
 --7. Clear temp table
 drop table #CurrData;
+drop table #CurrLimitData;
 drop table #PrevData;
 drop table #LastYearData;
+drop table #LastYearDataLimitData;
 drop table #ThisYearData;
 
 end 
