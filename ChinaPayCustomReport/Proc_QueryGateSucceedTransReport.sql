@@ -95,91 +95,40 @@ begin
     set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 end
 
---------------------------------------------------------
-     declare @StartDate datetime;
-declare @PeriodUnit nchar(4);
-declare @EndDate datetime ;
-set @StartDate = '2012-1-1';
-set @PeriodUnit = N'×Ô¶¨Òå';
-set @EndDate = '2012-12-31';
-declare @CurrStartDate datetime;
-declare @CurrEndDate datetime;
-declare @PrevStartDate datetime;
-declare @PrevEndDate datetime;
-declare @LastYearStartDate datetime;
-declare @LastYearEndDate datetime;
-set @CurrStartDate = @StartDate;
-set @CurrEndDate = DateAdd(day,1,@EndDate);
-set @PrevStartDate = DATEADD(DAY, -1*datediff(day,@CurrStartDate,@CurrEndDate), @CurrStartDate);
-set @PrevEndDate = @CurrStartDate;
-set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate); 
-set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
----------------------------------------------------------
-
 --1. Get this period trade count/amount
---select
---	GateNo,
---	MerchantNo,
---	sum(PurCnt) SumSucceedCount,
---	sum(PurAmt) SumSucceedAmount
---into
---	#CurrPayTrans
---from
---	Table_FeeCalcResult
---where
---	FeeEndDate >= @CurrStartDate
---	and
---	FeeEndDate < @CurrEndDate
---group by
---	GateNo,
---	MerchantNo;
+select  
+	GateNo,  
+	MerchantNo,  
+	sum(SucceedTransCount) SumSucceedCount,  
+	sum(SucceedTransAmount) SumSucceedAmount  
+into  
+	#CurrPayTrans  
+from  
+	FactDailyTrans  
+where  
+	DailyTransDate >= @CurrStartDate  
+	and  
+	DailyTransDate < @CurrEndDate  
+group by  
+	GateNo,  
+	MerchantNo;  
 
-
-select
-	BankSettingID,
-	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataC
-from
-	Table_OraTransSum
-where
-	CPDate >= @CurrStartDate
-	and
-	CPDate < @CurrEndDate;
-
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataC ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-
-select
-	BankSettingID as GateNo,
-	MerchantNo,
-	sum(TransCount) SumSucceedCount,
-	sum(TransAmount) SumSucceedAmount,
-	(select SUM(#ORADataC.FeeAmount) from #ORADataC where MerchantNo = Table_OraTransSum.MerchantNo and BankSettingID = Table_OraTransSum.BankSettingID) CurrFeeAmt
-into
-	#CurrOraTrans
-from
-	Table_OraTransSum
-where
-	CPDate >= @CurrStartDate
-	and
-	CPDate < @CurrEndDate
-group by
-	BankSettingID,
-	MerchantNo;
-
+select  
+	BankSettingID as GateNo,  
+	MerchantNo,  
+	sum(TransCount) SumSucceedCount,  
+	sum(TransAmount) SumSucceedAmount  
+into  
+	#CurrOraTrans  
+from  
+	Table_OraTransSum  
+where  
+	CPDate >= @CurrStartDate  
+	and  
+	CPDate < @CurrEndDate  
+group by  
+	BankSettingID,  
+	MerchantNo;  
 
 --2. Get previous period trade count/amount
 select
@@ -273,12 +222,12 @@ begin
 		LastYearSumValue
 	)
 	select
-		N'Pay' as TypeName,
-		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,
-		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,
-		(Convert(Decimal,ISNULL(CurrTrans.SumSucceedAmount, 0))/1000000) CurrSumValue,
-		(Convert(Decimal,ISNULL(PrevTrans.SumSucceedAmount, 0))/1000000) PrevSumValue,
-		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedAmount, 0))/1000000) LastYearSumValue
+		N'Pay' as TypeName,  
+		coalesce(CurrTrans.GateNo, PrevTrans.GateNo, LastYearTrans.GateNo) GateNo,  
+		coalesce(CurrTrans.MerchantNo, PrevTrans.MerchantNo, LastYearTrans.MerchantNo) MerchantNo,  
+		(Convert(Decimal,ISNULL(CurrTrans.SumSucceedAmount, 0))/1000000) CurrSumValue,  
+		(Convert(Decimal,ISNULL(PrevTrans.SumSucceedAmount, 0))/1000000) PrevSumValue,  
+		(Convert(Decimal,ISNULL(LastYearTrans.SumSucceedAmount, 0))/1000000) LastYearSumValue  
 	from
 		#CurrPayTrans CurrTrans
 		full outer join
