@@ -1,3 +1,5 @@
+--[Modified] At 2013-05-29 By chen.wu
+--Add support to 'FN', 'FS', 'FT', 'IF', 'TF' types
 
 if OBJECT_ID(N'xp_GetParentProcs', N'P') is not null
 begin
@@ -17,7 +19,7 @@ if not exists (
 	from
 		sys.objects
 	where
-		type in ('P', 'U')
+		type in ('P', 'U', 'FN', 'FS', 'FT', 'IF', 'TF')
 		and
 		name = @object
 )

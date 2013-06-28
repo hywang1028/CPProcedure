@@ -1,60 +1,72 @@
 --[Create] At 2012-03-28 By chen.wu
---Input: @GateNo
+--Input: @GateNo, @Date
 --Output: Current Payment Cost Calculation Expression
 
-if OBJECT_ID(N'Fn_CurrPaymentCostCalcExp',N'FN') is not null
+if OBJECT_ID(N'Fn_PaymentCostCalcExp',N'FN') is not null
 begin
-	drop function Fn_CurrPaymentCostCalcExp;
+	drop function Fn_PaymentCostCalcExp;
 end
 go
 
-create function Fn_CurrPaymentCostCalcExp
+create function Fn_PaymentCostCalcExp
 (
-	@GateNo varchar(4)
+	@GateNo varchar(4),
+	@Date datetime = null
 )
-returns nvarchar(200)
+returns nvarchar(max)
 as
 begin
 	declare @RefMaxAmt bigint;  
 	set @RefMaxAmt = 100000000000000;
 	
-	declare @CostCalcExp nvarchar(200);
+	set @Date = isnull(@Date, getdate());
+	
+	declare @CostCalcExp nvarchar(max);
 	
 	declare @LatestRule table
 	(
 		GateNo char(4),
+		CostRuleType varchar(20),
 		ApplyDate datetime		
 	);
 	
 	insert into @LatestRule
 	(
 		GateNo,
+		CostRuleType,
 		ApplyDate
 	)
 	select
-		GateNo,
-		MAX(ApplyDate) ApplyDate
+		r1.GateNo,
+		r1.CostRuleType,
+		r1.ApplyDate		
 	from
-		Table_GateCostRule
+		Table_GateCostRule r1
 	where
-		ApplyDate <= getdate()
+		r1.ApplyDate <= @Date
 		and
-		GateNo = @GateNo
-	group by
-		GateNo;
+		r1.GateNo = @GateNo
+		and
+		not exists(select
+						1
+					from
+						Table_GateCostRule r2
+					where
+						r2.GateNo = @GateNo
+						and
+						r2.ApplyDate <= @Date
+						and
+						r2.ApplyDate > r1.ApplyDate)
+
 	
 	--1. Cost Rule By Trans	
 	if exists (
 		select
 			1
 		from
-			@LatestRule LatestRule
-			inner join
-			Table_CostRuleByTrans ByTrans
-			on
-				LatestRule.GateNo = ByTrans.GateNo
-				and
-				LatestRule.ApplyDate = ByTrans.ApplyDate)
+			@LatestRule
+		where
+			CostRuleType = 'ByTrans')
 	begin
 		--select * from Table_CostRuleByTrans
 		set @CostCalcExp = stuff(
@@ -129,13 +141,9 @@ begin
 		select
 			1
 		from
-			@LatestRule LatestRule
-			inner join
-			Table_CostRuleByYear ByYear
-			on
-				LatestRule.GateNo = ByYear.GateNo
-				and
-				LatestRule.ApplyDate = ByYear.ApplyDate)
+			@LatestRule
+		where
+			CostRuleType = 'ByYear')
 	begin
 		--select distinct FeeType from Table_CostRuleByYear
 		set @CostCalcExp = stuff(
@@ -212,13 +220,9 @@ begin
 		select
 			1
 		from
-			@LatestRule LatestRule
-			inner join
-			Table_CostRuleByMer ByMer
-			on
-				LatestRule.GateNo = ByMer.GateNo
-				and
-				LatestRule.ApplyDate = ByMer.ApplyDate)
+			@LatestRule
+		where
+			CostRuleType = 'ByMer')
 	begin
 		set @CostCalcExp = stuff(
 			(select
@@ -246,6 +250,70 @@ begin
 		1,
 		1,
 		'')
+	end
+	--4 Cost Rule By Upop
+	else if exists(
+		select
+			1
+		from
+			@LatestRule
+		where
+			CostRuleType = 'ByUpop')
+	begin
+		--select * from Table_UpopCostRule
+		set @CostCalcExp = stuff(
+			(select
+				'，' +
+				case when
+					ByUpop.CostRuleType = 'ByMer'
+					and
+					ByUpop.FeeType = 'Fixed'
+				then 
+					N'商户：' + ByUpop.RuleObject + N' 每笔成本' + convert(varchar, convert(decimal(10, 3), ByUpop.FeeValue/100)) + N'元'
+				when
+					ByUpop.CostRuleType = 'ByMer'
+					and
+					ByUpop.FeeType = 'Percent'
+				then 
+					N'商户：' + ByUpop.RuleObject + N' 按金额的' + convert(varchar, convert(decimal(10, 3), ByUpop.FeeValue * 100)) + N'%收取成本'
+				when
+					ByUpop.CostRuleType = 'ByMcc'
+					and
+					ByUpop.FeeType = 'Fixed'
+				then
+					N'MCC：' + ByUpop.RuleObject + N' 每笔成本' + convert(varchar, convert(decimal(10, 3), ByUpop.FeeValue/100)) + N'元'
+				when
+					ByUpop.CostRuleType = 'ByMcc'
+					and
+					ByUpop.FeeType = 'Percent'
+				then 
+					N'MCC：' + ByUpop.RuleObject + N' 按金额的' + convert(varchar, convert(decimal(10, 3), ByUpop.FeeValue * 100)) + N'%收取成本'
+				when
+					ByUpop.CostRuleType = 'ByCd'
+				then
+					N'借贷标记：' + ByUpop.RuleObject + N' 按金额的' + convert(varchar, convert(decimal(10, 3), ByUpop.FeeValue * 100)) + N'%收取成本'
+				else
+					N''
+				end
+			from
+				Table_UpopCostRule ByUpop
+			where
+				ByUpop.ApplyDate <= @Date
+				and
+				not exists(select
+								1
+							from
+								Table_UpopCostRule ByUpop2
+							where
+								ByUpop2.ApplyDate <= @Date
+								and
+								ByUpop2.RuleObject = ByUpop.RuleObject
+								and
+								ByUpop2.ApplyDate > ByUpop.ApplyDate)
+			for xml path('')),
+			1,
+			1,
+			'')
 	end		
 	else
 	begin
