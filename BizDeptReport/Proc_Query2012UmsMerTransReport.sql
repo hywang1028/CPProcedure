@@ -5,6 +5,7 @@
 --[Modified] at 2012-07-13 by 王红燕  Description:Add Financial Dept Configuration Data
 --[Modified] at 2012-09-07 by 王红燕  Description:根据用户的报表变更需求变更
 --[Modified] at 2012-12-13 by 王红燕  Description:Add Branch Office Fund Trans Data
+--[Modified] at 2013-06-18 by 丁俊昊  Description:Add Add UpopliqFeeLiq_Data and TraScreenSum Data
 if OBJECT_ID(N'Proc_Query2012UmsMerTransReport', N'P') is not null
 begin
 	drop procedure Proc_Query2012UmsMerTransReport;
@@ -12,7 +13,7 @@ end
 go
 --总交易量
 create procedure Proc_Query2012UmsMerTransReport
-	@StartDate datetime = '2012-11-01',
+	@StartDate datetime = '2013-05-01',
 	@PeriodUnit nchar(4) = N'月',
 	@EndDate datetime = '2012-12-01',
 	@TransType nchar(10) = N'总交易量'
@@ -26,8 +27,10 @@ begin
 end
 
 --2. Prepare StartDate and EndDate
+
 declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
+
 
 if(@PeriodUnit = N'月')
 begin
@@ -59,7 +62,7 @@ end;
 --3.0 Get GateNo Config Data
 Create table #GateNo
 (
-	GateNo char(4) not null
+	GateNo char(20) not null
 );
 
 if(@TransType = N'总交易量')
@@ -68,7 +71,17 @@ begin
     select
 		GateNo
     from
-		Table_GateRoute;
+		Table_GateRoute
+	union all
+	select
+		distinct GateNo
+	from
+		Table_UpopliqFeeLiqResult
+	union all
+	select
+		distinct ChannelNo
+	from
+		Table_TraScreenSum;
 end
 else if(@TransType = N'B2C(除UPOP)')
 begin
@@ -98,8 +111,14 @@ begin
     from
 		Table_GateCategory
 	where
-		GateCategory1 = 'UPOP';
+		GateCategory1 = 'UPOP'
+	union all
+	select
+		distinct GateNo
+	from
+		Table_UpopliqFeeLiqResult
 end;
+
 
 --3.1 Prepare Product Trans Data
 --3.1.0 Prepare All Payment Data
@@ -144,14 +163,14 @@ InvalidPayData as
 	group by
 		Trans.DailyTransLog_MerchantNo,
 		Trans.DailyTransLog_GateNo
-)
+),
+Payment as
+(
 select
 	coalesce(Data.MerchantNo,Invalid.MerchantNo) MerchantNo,
 	coalesce(Data.GateNo,Invalid.GateNo) GateNo,
 	ISNULL(Data.TransAmt,0)+ISNULL(Invalid.TransAmt,0) TransAmt,
 	ISNULL(Data.TransCnt,0)+ISNULL(Invalid.TransCnt,0) TransCnt
-into
-	#PaymentData
 from
 	ValidPayData Data
 	full outer join
@@ -159,8 +178,59 @@ from
 	on
 		Data.MerchantNo = Invalid.MerchantNo
 		and
-		Data.GateNo = Invalid.GateNo;
-		
+		Data.GateNo = Invalid.GateNo
+), 
+Tra as
+(
+select
+	MerchantNo,
+	ChannelNo,
+	SUM(CalFeeAmt) TransAmt,
+	SUM(CalFeeCnt) TransCnt
+from
+	Table_TraScreenSum Tra
+	inner join
+	#GateNo
+	on
+		Tra.ChannelNo = #GateNo.GateNo
+where
+	CPDate >= @CurrStartDate
+	and
+	CPDate < @CurrEndDate
+	and
+	TransType in ('100001','100004')
+group by
+	MerchantNo,
+	ChannelNo
+),
+UPOP as
+(
+	select
+		UPOP.MerchantNo,
+		UPOP.GateNo,
+		SUM(PurAmt) TransAmt,
+		SUM(PurCnt) TransCnt
+	from
+		Table_UpopliqFeeLiqResult UPOP
+		inner join
+		#GateNo
+		on
+			UPOP.GateNo = #GateNo.GateNo
+	where
+		TransDate >= @CurrStartDate
+		and
+		TransDate < @CurrEndDate
+	group by
+		UPOP.MerchantNo,
+		UPOP.GateNo
+)
+	select * into  #PaymentData from Payment
+	union all
+	select * from UPOP
+	union all
+	select * from Tra;
+
+
 --3.1.1 Prepare '互联宝' Data
 select
 	MerchantNo,
@@ -176,10 +246,11 @@ where
 	MerchantNo not in (select MerchantNo from Table_EposTakeoffMerchant)
 group by
 	MerchantNo;
-	
+
+
 --3.1.2 Prepare '网上批扣' Data 
 select
-	MerchantNo,
+	#PaymentData.MerchantNo,
 	SUM(TransCnt) TransCnt,
 	SUM(TransAmt) TransAmt
 into
@@ -188,8 +259,11 @@ from
 	#PaymentData
 where
 	GateNo in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
+	or
+	GateNo in (select ChannelNo from Table_TraScreenSum where TransType in ('100001','100004'))
 group by
 	MerchantNo;
+
 
 --3.1.3 Prepare '便民' Data
 With PublicBiz as
@@ -221,7 +295,8 @@ TripBiz as
 select * into #ConvenienceData from PublicBiz
 union all
 select * from TripBiz;
-	
+
+
 --3.1.4 Prepare '商城（扣除）' Data
 select
 	MerchantNo,
@@ -235,7 +310,8 @@ where
 	MerchantNo in ('808080290000007')
 group by
 	MerchantNo;
-	
+
+
 --3.1.5 Prepare '商城（上报）' Data
 With EmallTransSum as
 (
@@ -296,7 +372,8 @@ from
 	on
 		EmallTransSum.BranchOffice = BranchOffice.UnnormalBranchOfficeName;
 
---3.1.6 Prepare '代付类' Data
+
+--3.1.6 Prepare '代付类' Data and '新代收付' Data
 With ORATransData as
 (
 	select
@@ -310,6 +387,21 @@ With ORATransData as
 		and
 		CPDate <  @CurrEndDate
 	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) TransCnt,
+		SUM(CalFeeAmt) TransAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate <  @CurrEndDate
+		and
+		TransType in ('100002','100005')
+	group by 
 		MerchantNo
 ),
 WUTransData as
@@ -327,9 +419,19 @@ WUTransData as
 	group by
 		MerchantNo
 )
-select * into #ORAWUTransData from ORATransData
-union all
-select * from WUTransData;
+	select 
+		MerchantNo,
+		SUM(TransCnt) TransCnt,
+		SUM(TransAmt) TransAmt
+	into
+		#ORAWUTransData	
+	from 
+		ORATransData
+	group by
+		MerchantNo
+	union all
+	select * from WUTransData;
+
 
 --3.1.7 Prepare All Trans Data(include UPOP and CupSecure)
 With ExistMerInfo as
@@ -353,7 +455,7 @@ ExistMerTransData as
 	group by
 		MerchantNo
 ),
-AllMerTransData as
+AllMerTrans as
 (
 	select
 		MerchantNo,
@@ -361,6 +463,17 @@ AllMerTransData as
 		SUM(TransAmt) TransAmt
 	from
 		#PaymentData
+	group by
+		MerchantNo
+),
+AllMerTransData as
+(
+	select
+		MerchantNo,
+		SUM(TransCnt) TransCnt,
+		SUM(TransAmt) TransAmt
+	from
+		AllMerTrans
 	group by
 		MerchantNo
 )
@@ -377,9 +490,10 @@ from
 	on
 		AllMer.MerchantNo = ExistMer.MerchantNo;
 
+
 --3.2.1 Prepare Mer Info Data 
-select 
-	coalesce(PayMer.MerchantNo,OraMer.MerchantNo) MerchantNo,
+select
+	coalesce(PayMer.MerchantNo,OraMer.MerchantNo) CPMerchantNo,
 	coalesce(PayMer.MerchantName,OraMer.MerchantName) MerchantName,
 	coalesce(PayMer.OpenTime,OraMer.OpenTime) OpenTime
 into
@@ -390,25 +504,47 @@ from
 	(select * from Table_OraMerchants where OpenTime < @CurrEndDate) OraMer
 	on
 		PayMer.MerchantNo = OraMer.MerchantNo;
-		
+
+select 
+	Coalesce(#MerOpenTime.CPMerchantNo,Table_TraMerchantInfo.MerchantNo) CPMerchantNo,
+	Coalesce(#MerOpenTime.MerchantName,Table_TraMerchantInfo.MerchantName) MerchantName,
+	#MerOpenTime.OpenTime
+into 
+	#MerAndUPOPOpenTime 
+from 
+	#MerOpenTime
+	full join
+	Table_TraMerchantInfo
+	on
+		#MerOpenTime.CPMerchantNo = Table_TraMerchantInfo.MerchantNo
+union 
+select MerchantNo,MerchantName,null as OpenTime from Table_UpopliqMerInfo;
+
+
 --3.3 Join All Config Data
 With SalesBranchOffice as
 (
 	select
 		Sales.MerchantNo,
-		BranchOffice.UmsSpec BranchOffice
+		BranchOffice.UmsSpec BranchOffice,
+		Mer.IndustryName
 	from
 		Table_SalesDeptConfiguration Sales
 		left join
 		Table_BranchOfficeNameRule BranchOffice
 		on
 			RTRIM(Sales.BranchOffice) = RTRIM(BranchOffice.UnnormalBranchOfficeName)
+		left join 
+		Table_MerAttribute Mer
+		on
+			Sales.MerchantNo = Mer.MerchantNo 
 ),
 FinanceBranchOffice as
 (
 	select
 		Finance.MerchantNo,
-		BranchOffice.UmsSpec BranchOffice
+		BranchOffice.UmsSpec BranchOffice,
+		Finance.IndustryName
 	from
 		Table_FinancialDeptConfiguration Finance
 		left join
@@ -420,18 +556,19 @@ MerBranchOffice as
 (
 	select
 		Coalesce(Sales.MerchantNo,Finance.MerchantNo) MerchantNo,
-		Coalesce(Sales.BranchOffice,Finance.BranchOffice) BranchOffice
+		Coalesce(Sales.BranchOffice,Finance.BranchOffice) BranchOffice,
+		Coalesce(Finance.IndustryName,Sales.IndustryName) IndustryName
 	from
 		SalesBranchOffice Sales
 		full outer join
-		FinanceBranchOffice Finance 
+		FinanceBranchOffice Finance
 		on
 			RTRIM(Sales.MerchantNo) = RTRIM(Finance.MerchantNo)
 ),
 AllTransData as
 (
 	select
-		Mer.MerchantNo,
+		Mer.CPMerchantNo as AllMerchantNo,
 		Mer.MerchantName,
 		Mer.OpenTime,
 		ISNULL(Pay.TransCnt,0) as PayTransCnt,
@@ -445,61 +582,94 @@ AllTransData as
 		ISNULL(ORA.TransCnt,0) as ORATransCnt,
 		ISNULL(ORA.TransAmt,0) as ORATransAmt
 	from
-		#MerOpenTime Mer
-		left join
+		#MerAndUPOPOpenTime Mer
+		full join
 		#PaymentTransData Pay
 		on
-			Mer.MerchantNo = Pay.MerchantNo
-		left join
+			Mer.CPMerchantNo = Pay.MerchantNo
+		full join
 		#EPOSTransData EPOS
 		on
-			Mer.MerchantNo = EPOS.MerchantNo
-		left join
+			Mer.CPMerchantNo = EPOS.MerchantNo
+		full join
 		#DeductTransData Deduct
 		on
-			Mer.MerchantNo = Deduct.MerchantNo
-		left join
+			Mer.CPMerchantNo = Deduct.MerchantNo
+		full join
 		#ConvenienceData Convenience
 		on
-			Mer.MerchantNo = Convenience.MerchantNo
-		left join
+			Mer.CPMerchantNo = Convenience.MerchantNo
+		full join
 		#ORAWUTransData ORA
 		on
-			Mer.MerchantNo = ORA.MerchantNo
+			Mer.CPMerchantNo = ORA.MerchantNo
+),
+FinalyMer as
+(
+	select
+		AllMerchantNo,
+		Table_CpUpopRelation.CpMerNo,
+		MerchantName,
+		OpenTime,
+		PayTransCnt,
+		PayTransAmt,
+		EPOSTransCnt,
+		EPOSTransAmt,
+		DeductTransCnt,
+		DeductTransAmt,
+		ConvenienceTransCnt,
+		ConvenienceTransAmt,
+		ORATransCnt,
+		ORATransAmt
+	from
+		AllTransData
+		left join
+		Table_CpUpopRelation
+		on
+			AllTransData.AllMerchantNo = Table_CpUpopRelation.UpopMerNo
 )
 select
 	ISNULL(MerBranchOffice.BranchOffice,N'') BranchOffice,
 	case when MerBranchOffice.BranchOffice is not null then 0 else 1 End as OrderID,
-	AllTransData.MerchantNo,
-	AllTransData.MerchantName,
-	coalesce(MerType.MerchantType,N'') MerchantType,
+	FinalyMer.AllMerchantNo AllMerchantNo,
+	FinalyMer.MerchantName,
+	case when
+		FinalyMer.AllMerchantNo in (select MerchantNo from Table_UpopliqFeeLiqResult where Table_UpopliqFeeLiqResult.MerchantNo = FinalyMer.AllMerchantNo)
+	then
+		'UPOP直连'
+	else
+		coalesce(MerType.MerchantType,N'')
+	end
+		MerchantType,
+	MerBranchOffice.IndustryName,
 	case when MerType.OpenAccountDate is not null then Convert(char(10),MerType.OpenAccountDate,120) else N'' End as OpenTime,
-	ISNULL(AllTransData.PayTransCnt,0)/10000.0 PayTransCnt,
-	ISNULL(AllTransData.PayTransAmt,0)/1000000.0 PayTransAmt,
-	ISNULL(AllTransData.EPOSTransCnt,0)/10000.0 EPOSTransCnt,
-	ISNULL(AllTransData.EPOSTransAmt,0)/1000000.0 EPOSTransAmt,
-	ISNULL(AllTransData.DeductTransCnt,0)/10000.0 DeductTransCnt,
-	ISNULL(AllTransData.DeductTransAmt,0)/1000000.0 DeductTransAmt,
-	ISNULL(AllTransData.ConvenienceTransCnt,0)/10000.0 ConvenienceTransCnt,
-	ISNULL(AllTransData.ConvenienceTransAmt,0)/1000000.0 ConvenienceTransAmt,
+	ISNULL(FinalyMer.PayTransCnt,0)/10000.0 PayTransCnt,
+	ISNULL(FinalyMer.PayTransAmt,0)/1000000.0 PayTransAmt,
+	ISNULL(FinalyMer.EPOSTransCnt,0)/10000.0 EPOSTransCnt,
+	ISNULL(FinalyMer.EPOSTransAmt,0)/1000000.0 EPOSTransAmt,
+	ISNULL(FinalyMer.DeductTransCnt,0)/10000.0 DeductTransCnt,
+	ISNULL(FinalyMer.DeductTransAmt,0)/1000000.0 DeductTransAmt,
+	ISNULL(FinalyMer.ConvenienceTransCnt,0)/10000.0 ConvenienceTransCnt,
+	ISNULL(FinalyMer.ConvenienceTransAmt,0)/1000000.0 ConvenienceTransAmt,
 	0 as EmallTransCnt,
 	0 as EmallTransAmt,
-	case when @TransType = N'总交易量' then ISNULL(AllTransData.ORATransCnt,0)/10000.0 Else 0 End as ORATransCnt,
-	case when @TransType = N'总交易量' then ISNULL(AllTransData.ORATransAmt,0)/1000000.0 Else 0 End as ORATransAmt,
+	case when @TransType = N'总交易量' then ISNULL(FinalyMer.ORATransCnt,0)/10000.0 Else 0 End as ORATransCnt,
+	case when @TransType = N'总交易量' then ISNULL(FinalyMer.ORATransAmt,0)/1000000.0 Else 0 End as ORATransAmt,
 	0 as FundTransCnt,
 	0 as FundTransAmt
 into
 	#Result
 from
-	AllTransData
+	FinalyMer
 	left join
 	MerBranchOffice MerBranchOffice
 	on
-		AllTransData.MerchantNo = MerBranchOffice.MerchantNo
+		Coalesce(FinalyMer.CpMerNo,FinalyMer.AllMerchantNo) = MerBranchOffice.MerchantNo
 	left join
 	Table_MerOpenAccountInfo MerType
 	on
-		AllTransData.MerchantNo = MerType.MerchantNo;
+		FinalyMer.AllMerchantNo = MerType.MerchantNo;
+
 
 if(@TransType = N'B2B' or @TransType = 'UPOP')
 begin
@@ -509,21 +679,68 @@ else if(@TransType = N'B2C(除UPOP)')
 begin
 	select * from #Result
 	union all
-	select * from #EmallTransData
+	select
+			BranchOffice,
+			OrderID,
+			MerchantNo as AllMerchantNo,
+			MerchantName,
+			MerchantType,
+			N'' as IndustryName,
+			OpenTime,
+			PayTransCnt,
+			PayTransAmt,
+			EPOSTransCnt,
+			EPOSTransAmt,
+			DeductTransCnt,
+			DeductTransAmt,
+			ConvenienceTransCnt,
+			ConvenienceTransAmt,
+			EmallTransCnt,
+			EmallTransAmt,
+			ORATransCnt,
+			ORATransAmt,
+			FundTransCnt,
+			FundTransAmt
+		from
+			#EmallTransData
 	order by OrderID,BranchOffice;	
 End
 else if(@TransType = N'总交易量')
 begin
 	select * from #Result
 	union all
-	select * from #EmallTransData
+	select
+		BranchOffice,
+		OrderID,
+		MerchantNo as AllMerchantNo,
+		MerchantName,
+		MerchantType,
+		N'' as IndustryName,
+		OpenTime,
+		PayTransCnt,
+		PayTransAmt,
+		EPOSTransCnt,
+		EPOSTransAmt,
+		DeductTransCnt,
+		DeductTransAmt,
+		ConvenienceTransCnt,
+		ConvenienceTransAmt,
+		EmallTransCnt,
+		EmallTransAmt,
+		ORATransCnt,
+		ORATransAmt,
+		FundTransCnt,
+		FundTransAmt
+	from
+		#EmallTransData
 	union all
 	select 
 		BranchOfficeNameRule.NormalBranchOfficeName BranchOffice,
 		0 as OrderID,
-		N'' as MerchantNo,
+		N'' as AllMerchantNo,
 		N'' as MerchantName,
 		N'基金' as MerchantType,
+		N'' as IndustryName,
 		N'' as OpenTime,
 		0 as PayTransCnt,
 		0 as PayTransAmt,
@@ -560,7 +777,7 @@ begin
 	select 
 		BranchOfficeNameRule.NormalBranchOfficeName BranchOffice,
 		0 as OrderID,
-		N'' as MerchantNo,
+		N'' as AllMerchantNo,
 		N'' as MerchantName,
 		N'基金' as MerchantType,
 		N'' as OpenTime,
@@ -592,6 +809,7 @@ begin
 		BranchOfficeNameRule.NormalBranchOfficeName;	
 end
 
+
 --4. Drop Table
 Drop table #GateNo;
 Drop Table #PaymentData;
@@ -606,3 +824,84 @@ Drop Table #MerOpenTime;
 Drop table #Result;
 
 End
+
+---------------------------------------------------------------------------------TEST DATA
+-----1.
+--select SUM(TransAmt)TransAmt,SUM(TransCnt)TransCnt from #PaymentTransData
+--union all
+--select SUM(TransAmt)TransAmt,SUM(TransCnt)TransCnt from #EPOSTransData
+--union all
+--select SUM(TransAmt)TransAmt,SUM(TransCnt)TransCnt from #DeductTransData
+--union all
+--select SUM(TransAmt)TransAmt,SUM(TransCnt)TransCnt from #ConvenienceData
+--union all
+--select SUM(TransAmt)TransAmt,SUM(TransCnt)TransCnt from #EmallTakeOffData
+--union all
+--select  SUM(TransAmt)TransAmt,SUM(TransCnt)TransCnt from #ORAWUTransData 
+
+-----2.
+--select
+--	SUM(PurAmt)TransAmt,
+--	SUM(PurCnt)TransCnt
+--from
+--	Table_UpopliqFeeLiqResult
+--where
+--	TransDate >= '2013-05-01'
+--	and
+--	TransDate < '2013-06-01'
+--union all
+--select 
+--	SUM(SucceedTransAmount) TransAmt,
+--	SUM(SucceedTransCount) TransCnt
+--from 
+--	FactDailyTrans
+--where 
+--	DailyTransDate >= '2013-05-01'
+--	and
+--	DailyTransDate < '2013-06-01'
+--	--and
+--	--GateNo in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
+--union all
+--select 
+--	SUM(DailyTransLog_SucceedTransAmount) TransAmt,
+--	SUM(DailyTransLog_SucceedTransCount) TransCnt
+--from 
+--	Table_InvalidDailyTrans
+--where 
+--	DailyTransLog_Date >= '2013-05-01'
+--	and
+--	DailyTransLog_Date < '2013-06-01'
+--	--and
+--	--DailyTransLog_GateNo in (select GateNo from Table_GateCategory where GateCategory1 = N'代扣')
+--union all
+--select 
+--	SUM(TransAmount) TransAmt,
+--	SUM(TransCount) TransCnt
+--from
+--	Table_OraTransSum 
+--where 
+--	CPDate >= '2013-05-01'
+--	and
+--	CPDate < '2013-06-01'
+--union all
+--select 
+--	SUM(CalFeeAmt) TransAmt,
+--	SUM(CalFeeCnt) TransCnt
+--from 
+--	Table_TraScreenSum 
+--where 
+--	CPDate >= '2013-05-01'
+--	and
+--	CPDate < '2013-06-01'
+--union all
+--select 
+--	SUM(DestTransAmount) TransAmt,
+--	COUNT(DestTransAmount) TransCnt	
+--from 
+--	Table_WUTransLog 
+--where
+--	CPDate >= '2013-05-01'
+--	and
+--	CPDate < '2013-06-01'
+---3.
+----1. = 2.
