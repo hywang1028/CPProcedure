@@ -3,6 +3,8 @@
 --Output:GateNo,MerchantNo,FeeEndDate,TransCnt,TransAmt,CostAmt
 --[Modified] At 2012-03-21 By Chen.wu  Add @HisRefDate param
 --[Modified] At 2012-05-25 By Õı∫Ï—‡  Add @ConvertToRMB param
+--[Modified] At 2013-05-28 By Chen.wu Add ByUpop Category
+
 if OBJECT_ID(N'Proc_CalPaymentCost',N'P') is not null
 begin
 	drop procedure Proc_CalPaymentCost;
@@ -10,8 +12,8 @@ end
 go
 
 create procedure Proc_CalPaymentCost
-	@StartDate datetime = '2011-07-01',
-	@EndDate datetime = '2011-08-01',
+	@StartDate datetime = '2013-03-01',
+	@EndDate datetime = '2013-06-01',
 	@HisRefDate datetime = null,
 	@ConvertToRMB char(2) = null
 as
@@ -37,7 +39,14 @@ select
 	Fee.PurAmt,
 	Fee.FeeAmt,
 	Fee.InstuFeeAmt,
-	Fee.BankFeeAmt
+	Fee.BankFeeAmt,
+	case when 
+		LEN(Fee.CdFlag) = 1
+	then
+		'0'+Fee.CdFlag
+	else
+		Fee.CdFlag
+	end as CdFlag
 into
 	#FeeResult
 from
@@ -94,10 +103,13 @@ create table #GateMerRule
 	FeeAmt decimal(16,2),
 	InstuFeeAmt decimal(16,2),
 	BankFeeAmt decimal(16,2),
+	CdFlag char(2),
 	Cost decimal(18,4),
 	CostRuleType varchar(20),
 	ApplyDate datetime,
-	NextApplyDate datetime
+	NextApplyDate datetime,
+	SubCostRuleType varchar(15),
+	SubCostRuleValue decimal(15,4)
 );
 
 if @HisRefDate is not null
@@ -165,10 +177,13 @@ begin
 			FeeAmt,
 			InstuFeeAmt,
 			BankFeeAmt,
+			CdFlag,
 			Cost,
 			CostRuleType,
 			ApplyDate,
-			NextApplyDate
+			NextApplyDate,
+			SubCostRuleType,
+			SubCostRuleValue
 		)
 	select
 		FeeResult.GateNo,
@@ -179,10 +194,13 @@ begin
 		FeeResult.FeeAmt,
 		FeeResult.InstuFeeAmt,
 		FeeResult.BankFeeAmt,
+		FeeResult.CdFlag,
 		0 as Cost,
 		isnull(HisRule.CostRuleType, '') as CostRuleType,
 		HisRule.ApplyDate,
-		@EndDate NextApplyDate
+		@EndDate NextApplyDate,
+		'' as SubCostRuleType,
+		0 as SubCostRuleValue
 	from
 		#FeeResult FeeResult
 		left join
@@ -251,10 +269,13 @@ begin
 			FeeAmt,
 			InstuFeeAmt,
 			BankFeeAmt,
+			CdFlag,
 			Cost,
 			CostRuleType,
 			ApplyDate,
-			NextApplyDate
+			NextApplyDate,
+			SubCostRuleType,
+			SubCostRuleValue
 		)
 	select
 		FeeResult.GateNo,
@@ -265,6 +286,7 @@ begin
 		FeeResult.FeeAmt,
 		FeeResult.InstuFeeAmt,
 		FeeResult.BankFeeAmt,
+		FeeResult.CdFlag,
 		CONVERT(decimal(15,4),0) as Cost,
 		isnull(GateCostRule.CostRuleType, '') as CostRuleType,
 		isnull(FeeResultWithApplyDate.ApplyDate,'1900-01-01') as ApplyDate,
@@ -275,7 +297,9 @@ begin
 			@EndDate
 		else
 			FeeResultWithApplyDate.NextApplyDate
-		end as NextApplyDate
+		end as NextApplyDate,
+		'' as SubCostRuleType,
+		0 as SubCostRuleValue
 	from
 		#FeeResultWithAllApplyDate FeeResultWithApplyDate
 		inner join
@@ -724,6 +748,173 @@ where
 	and
 	left(CostRuleByMer.MerchantNo,1) = N'!';
 
+--4.4 Calculate by Upop
+--4.4.0 Create temp table #CostRuleByUpop
+create table #CostRuleByUpop
+(
+	CostRuleType nvarchar(10),
+	RuleObject varchar(15),
+	FeeType varchar(15),
+	FeeValue decimal(15,4),
+	ApplyDate date,
+	primary key (RuleObject, ApplyDate)
+);
+
+if @HisRefDate is not null
+begin
+	insert into #CostRuleByUpop
+	(
+		CostRuleType,
+		RuleObject,
+		FeeType,
+		FeeValue,
+		ApplyDate
+	)
+	select
+		rule1.CostRuleType,
+		rule1.RuleObject,
+		rule1.FeeType,
+		rule1.FeeValue,
+		'1900-01-01' as ApplyDate
+	from
+		Table_UpopCostRule rule1
+	where
+		rule1.ApplyDate <= @HisRefDate
+		and
+		not exists(select 
+						1 
+					from 
+						Table_UpopCostRule rule2 
+					where 
+						rule2.ApplyDate <= @HisRefDate 
+						and 
+						rule2.RuleObject = rule1.RuleObject 
+						and 
+						rule2.ApplyDate > rule1.ApplyDate)
+end
+else
+begin
+	insert into #CostRuleByUpop
+	(
+		CostRuleType,
+		RuleObject,
+		FeeType,
+		FeeValue,
+		ApplyDate
+	)
+	select
+		CostRuleType,
+		RuleObject,
+		FeeType,
+		FeeValue,
+		ApplyDate	
+	from
+		Table_UpopCostRule
+end
+
+--4.4.1 Attach ByMer SubCostRuleType
+update
+	GateMerRule
+set
+	GateMerRule.SubCostRuleType = byMer.FeeType,
+	GateMerRule.SubCostRuleValue = byMer.FeeValue
+from
+	#GateMerRule GateMerRule
+	inner join
+	Table_CpUpopRelation CpUpop
+	on
+		GateMerRule.MerchantNo = CpUpop.CpMerNo
+	cross apply
+	(select top(1)
+		FeeType,
+		FeeValue
+	from
+		#CostRuleByUpop
+	where
+		CostRuleType = N'ByMer'
+		and
+		RuleObject = CpUpop.UpopMerNo
+		and
+		ApplyDate <= GateMerRule.FeeEndDate
+	order by
+		ApplyDate desc) byMer
+where
+	GateMerRule.CostRuleType = 'ByUpop'
+	and
+	GateMerRule.SubCostRuleType = '';
+	
+--4.4.2 Attach ByMcc SubCostRuleType
+update
+	GateMerRule
+set
+	GateMerRule.SubCostRuleType = byMcc.FeeType,
+	GateMerRule.SubCostRuleValue = byMcc.FeeValue
+from
+	#GateMerRule GateMerRule
+	inner join
+	Table_CpUpopRelation CpUpop
+	on
+		GateMerRule.MerchantNo = CpUpop.CpMerNo
+	cross apply
+	(select top(1)
+		FeeType,
+		FeeValue
+	from
+		#CostRuleByUpop
+	where
+		CostRuleType = N'ByMcc'
+		and
+		RuleObject = SUBSTRING(CpUpop.UpopMerNo,8,4)
+		and
+		ApplyDate <= GateMerRule.FeeEndDate
+	order by
+		ApplyDate desc) byMcc
+where
+	GateMerRule.CostRuleType = 'ByUpop'
+	and
+	GateMerRule.SubCostRuleType = '';
+
+--4.4.3 Attach ByCd SubCostRuleType
+update
+	GateMerRule
+set
+	GateMerRule.SubCostRuleType = byCd.FeeType,
+	GateMerRule.SubCostRuleValue = byCd.FeeValue
+from
+	#GateMerRule GateMerRule
+	cross apply
+	(select top(1)
+		FeeType,
+		FeeValue
+	from
+		#CostRuleByUpop
+	where
+		CostRuleType = N'ByCd'
+		and
+		RuleObject = GateMerRule.CdFlag
+		and
+		ApplyDate <= GateMerRule.FeeEndDate
+	order by
+		ApplyDate desc) byCd
+where
+	GateMerRule.CostRuleType = 'ByUpop'
+	and
+	GateMerRule.SubCostRuleType = '';
+
+--4.4.4 Calculate byUpop Cost Value
+update
+	t
+set
+	t.Cost = case when t.SubCostRuleType = 'Fixed'
+				then t.SucceedTransCount * t.SubCostRuleValue
+				when t.SubCostRuleType = 'Percent'
+				then t.SucceedTransAmount * t.SubCostRuleValue
+				else 0 end
+from
+	#GateMerRule t
+where
+	t.CostRuleType = 'ByUpop';
+
 
 --5. Get result
 select 
@@ -752,5 +943,6 @@ drop table #TransDetail;
 drop table #CostRuleByYearFixed;
 drop table #ByYearFixedSingleGate;
 drop table #ByYearFixedGroupGate;
+drop table #CostRuleByUpop;
 
 end

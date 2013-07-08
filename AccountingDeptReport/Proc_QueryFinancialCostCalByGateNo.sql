@@ -1,6 +1,8 @@
 --[Modified] At 20120308 By 叶博:修改调用的子存储过程名、统一单位
 --[Modified] At 20120503 By 王红燕:修改网关成本规则显示方法
 --[Modified] At 20120528 By 王红燕:配合调用的子存储过程做相应修改
+--[Modified] At 20130529 By chen.wu using Fn_PaymentCostCalcExp replace Fn_CurrPaymentCostCalcExp
+
 if OBJECT_ID(N'Proc_QueryFinancialCostCalByGateNo',N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialCostCalByGateNo;
@@ -226,7 +228,7 @@ select
 	Result.CurrCost,
 	Result.PrevCost,
 	Result.LastYearCost,
-	dbo.Fn_CurrPaymentCostCalcExp(Result.GateNo) as CostCalculateRule
+	dbo.Fn_PaymentCostCalcExp(Result.GateNo,GETDATE()) as CostCalculateRule
 from
 	#Result Result
 	left join
