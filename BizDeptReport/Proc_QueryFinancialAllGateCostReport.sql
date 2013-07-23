@@ -393,16 +393,16 @@ select
 	NoCostGate.GateDesc,
 	Convert(decimal,GateCost.TransAmt)/100.0 as TransAmt,
 	GateCost.TransCnt,
-	case when NoCostGate.GateFlag = '2'
+	case when coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
 		 then 0 
 		 Else Convert(decimal,GateCost.ActCostAmt)/100.0 End as ActCostAmt,
-	case when NoCostGate.GateFlag = '2'
+	case when coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
 		 then N'无实际成本规则' 
 	End as ActCostRatio,
-	case when NoCostGate.GateNo is not null
+	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
 		 then 0
 		 Else Convert(decimal,GateCost.StdCostAmt)/100.0 End as StdCostAmt,
-	case when NoCostGate.GateNo is not null
+	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
 		 then 0
 		 Else case when GateCost.GateCategory in (N'代收付')
 			       then 0.7
@@ -412,7 +412,7 @@ select
 				   then 0.0025
 				   Else GateCost.StdCostAmt/GateCost.TransAmt
 	End End as StdCostRatio,
-	case when NoCostGate.GateNo is not null
+	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
 		 then 0 
 		 when GateCost.StdCostAmt is null 
 		 then NULL
@@ -437,6 +437,14 @@ from
 	StdCostRatio
 	on	
 		GateCost.GateNo = StdCostRatio.GateNo
+	left join
+	(select distinct GateNo from Table_GateCostRule) GateCostRule
+	on
+		GateCost.GateNo = GateCostRule.GateNo
+	left join
+	(Select distinct BankSettingID from Table_OraBankCostRule)OraCost
+	on
+		GateCost.GateNo = OraCost.BankSettingID
 --where
 --	GateCost.GateNo <> '0044/0045'
 order by
