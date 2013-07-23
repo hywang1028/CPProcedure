@@ -630,7 +630,7 @@ from
 	on
 		Sales.MerchantNo = LastYear.MerchantNo
 	left join
-	Table_SalesCurrencyRate Rate
+	Table_SalesDeptConfiguration Rate
 	on
 		Sales.MerchantNo = Rate.MerchantNo
 	left join
