@@ -98,7 +98,9 @@ select
 into
 	#GateCostRule
 from
-	Table_GateCostRule;
+	Table_GateCostRule
+where
+	CostRuleType <> 'ByUpop';
 	
 --2.2 Get GateRule From Partial 3 Tables
 select

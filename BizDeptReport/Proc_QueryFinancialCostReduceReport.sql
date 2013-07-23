@@ -9,7 +9,7 @@ go
 
 create procedure Proc_QueryFinancialCostReduceReport
 	@StartDate datetime = '2013-01-01',
-	@EndDate datetime = '2013-03-31'
+	@EndDate datetime = '2013-06-30'
 as
 begin
 
@@ -255,6 +255,31 @@ AllTransData as
 	union all
 	select * from OutsideTrans
 ),
+WithCostRuleGate as
+(
+	select
+		AllTransData.GateNo,
+		AllTransData.GateCategory,
+		SUM(AllTransData.TransAmt) TransAmt,
+		SUM(AllTransData.TransCnt) TransCnt,
+		SUM(AllTransData.CostAmt) CostAmt
+	from
+		AllTransData
+		left join
+		(select distinct GateNo from Table_GateCostRule) GateCostRule
+		on
+			AllTransData.GateNo = GateCostRule.GateNo
+		left join
+		(Select distinct BankSettingID from Table_OraBankCostRule)OraCost
+		on
+			AllTransData.GateNo = OraCost.BankSettingID
+	where
+		coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is not null
+	group by
+		AllTransData.GateNo,
+		AllTransData.GateCategory
+		
+),
 GateCostData as 
 (
 	select
@@ -273,19 +298,7 @@ GateCostData as
 			 then CostAmt 
 			 End as StdCostAmt
 	from
-		(
-			select
-				GateNo,
-				GateCategory,
-				SUM(TransAmt) TransAmt,
-				SUM(TransCnt) TransCnt,
-				SUM(CostAmt) CostAmt
-			from
-				AllTransData
-			group by
-				GateNo,
-				GateCategory
-		)Result
+		WithCostRuleGate		
 ),
 StdCostSum as
 (
