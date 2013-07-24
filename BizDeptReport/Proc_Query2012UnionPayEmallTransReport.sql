@@ -88,7 +88,7 @@ from
 	Table_BranchOfficeNameRule BranchOffice
 	on
 		Emall.BranchOffice = BranchOffice.UnnormalBranchOfficeName;
-	
+
 --4. Update BranchOffice Info
 update 
 	Emall
@@ -104,7 +104,7 @@ where
 	Emall.DestBranchOffice = N''
 	and
 	Emall.City is not null;
-					
+
 update 
 	Emall
 set
@@ -119,7 +119,7 @@ where
 	Emall.DestBranchOffice = N''
 	and
 	Emall.Province is not null;
-	
+
 update 
 	#EmallTransData
 set
@@ -146,7 +146,7 @@ from
 		Trans.MerchantNo = Mer.MerchantNo
 order by 
 	Trans.DestBranchOffice;
-		
+
 --6. Drop Table 
 Drop Table #EmallTransData;
 
