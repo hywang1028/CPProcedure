@@ -9,7 +9,7 @@ Create Procedure Proc_QueryUnionMerTransSum
 	@StartDate datetime = '2011-06-12',
 	@PeriodUnit nChar(3) = N'自定义',
 	@EndDate datetime = '2011-09-12',
-	@BranchOfficeName nChar(16) = N'中国银联股份有限公司安徽分公司'
+	@BranchOfficeName nChar(20) = N'中国银联股份有限公司辽宁分公司'
 as 
 begin
 
@@ -23,6 +23,7 @@ end
 --2. Prepare StartDate and EndDate
 declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
+
 
 if(@PeriodUnit = N'月')
 begin
@@ -43,65 +44,168 @@ else if(@PeriodUnit = N'自定义')
 begin
 	set @CurrStartDate = @StartDate;
 	set @CurrEndDate =   DATEADD(DAY,1,@EndDate);
-end
+end;
 
 
---3.Get SpecifiedTimePeriod Data
-select
-	MerchantNo,
-	(select MerchantName from Table_OraMerchants where MerchantNo = Table_OraTransSum.MerchantNo) MerchantName,
-	sum(TransCount) TransCount,
-	sum(TransAmount) TransAmount
-into
-	#OraTransSum
-from
-	Table_OraTransSum
-where
-	CPDate >= @CurrStartDate
-	and
-	CPDate < @CurrEndDate
-group by
-	MerchantNo;
+--3.Get NewORA_Deduct_Data and Tra_Data
+With ORATransData as
+(
+	select
+		MerchantNo,
+		SUM(TransCount) TransCnt,
+		SUM(TransAmount) TransAmt
+	from
+		Table_OraTransSum
+	where 
+		CPDate >= @CurrStartDate
+		and
+		CPDate <  @CurrEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) TransCnt,
+		SUM(CalFeeAmt) TransAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate <  @CurrEndDate
+	group by 
+		MerchantNo
+),
+WUTransData as
+(
+	select
+		MerchantNo,
+		(select MerchantName from Table_OraMerchants where MerchantNo = Table_WUTransLog.MerchantNo) MerchantName,
+		COUNT(DestTransAmount) TransCnt,
+		SUM(DestTransAmount) TransAmt
+	from
+		Table_WUTransLog
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate <  @CurrEndDate
+	group by
+		MerchantNo
+)
+	select 
+		ORATransData.MerchantNo,
+		Coalesce(Table_OraMerchants.MerchantName,Table_TraMerchantInfo.MerchantName) MerchantName,
+		SUM(TransCnt) TransCnt,
+		SUM(TransAmt) TransAmt
+	into
+		#OraTransSum
+	from 
+		ORATransData
+		left join
+		Table_OraMerchants
+		on
+			ORATransData.MerchantNo = Table_OraMerchants.MerchantNo
+		left join
+		Table_TraMerchantInfo
+		on
+			ORATransData.MerchantNo = Table_TraMerchantInfo.MerchantNo
+	group by
+		ORATransData.MerchantNo,
+		Coalesce(Table_OraMerchants.MerchantName,Table_TraMerchantInfo.MerchantName)
+	union all
+	select * from WUTransData;
 	
-select 
-	MerchantNo,
-	(select MerchantName from Table_MerInfo where MerchantNo = FactDailyTrans.MerchantNo) MerchantName,
-	sum(SucceedTransCount) SucceedTransCount,
-	sum(SucceedTransAmount) SucceedTransAmount
+	
+With ValidPayData as
+(
+	select 
+		Trans.MerchantNo MerchantNo,
+		SUM(Trans.SucceedTransCount) as TransCnt,
+		SUM(Trans.SucceedTransAmount) as TransAmt
+	from
+		FactDailyTrans Trans
+	where
+		Trans.DailyTransDate >= @CurrStartDate
+		and
+		Trans.DailyTransDate < @CurrEndDate
+	group by
+		Trans.MerchantNo
+),
+InvalidPayData as
+(
+	select 
+		Trans.DailyTransLog_MerchantNo MerchantNo,
+		SUM(Trans.DailyTransLog_SucceedTransCount) as TransCnt,
+		SUM(Trans.DailyTransLog_SucceedTransAmount) as TransAmt
+	from
+		Table_InvalidDailyTrans Trans
+	where
+		Trans.DailyTransLog_Date >= @CurrStartDate
+		and
+		Trans.DailyTransLog_Date < @CurrEndDate
+	group by
+		Trans.DailyTransLog_MerchantNo
+),
+FactDailyTrans as
+(
+select
+	coalesce(Data.MerchantNo,Invalid.MerchantNo) MerchantNo,
+	ISNULL(Data.TransCnt,0)+ISNULL(Invalid.TransCnt,0) TransCnt,
+	ISNULL(Data.TransAmt,0)+ISNULL(Invalid.TransAmt,0) TransAmt
+from
+	ValidPayData Data
+	full outer join
+	InvalidPayData Invalid
+	on
+		Data.MerchantNo = Invalid.MerchantNo
+where
+	coalesce(Data.MerchantNo,Invalid.MerchantNo)not in ('808080290000007')
+)
+select
+	case when
+		UPOP.MerchantNo = CPRelation.UpopMerNo
+	then
+		CPRelation.CpMerNo
+	else
+		UPOP.MerchantNo
+	end
+		as MerchantNo,
+	Table_UpopliqMerInfo.MerchantName,
+	SUM(PurCnt) TransCnt,
+	SUM(PurAmt) TransAmt
 into
-	#FactDailyTrans
+	#FactDailyTransAndUPOP
+from
+	Table_UpopliqFeeLiqResult UPOP
+	left join
+	Table_UpopliqMerInfo
+	on
+		UPOP.MerchantNo = Table_UpopliqMerInfo.MerchantNo
+	left join
+	Table_CpUpopRelation  CPRelation
+	on
+		UPOP.MerchantNo = CPRelation.UpopMerNo
+where
+	TransDate >= @CurrStartDate
+	and
+	TransDate < @CurrEndDate
+group by
+	UPOP.MerchantNo,
+	Table_UpopliqMerInfo.MerchantName,CPRelation.UpopMerNo,CPRelation.CpMerNo
+union all
+select
+	FactDailyTrans.MerchantNo,
+	Table_MerInfo.MerchantName,
+	TransCnt,
+	TransAmt
 from
 	FactDailyTrans
-where
-	DailyTransDate >= @CurrStartDate
-	and
-	DailyTransDate < @CurrEndDate
-group by
-	MerchantNo;
-	
-select 
-	EmallTransSum.MerchantNo,
-	EmallTransSum.MerchantName,
-	sum(EmallTransSum.SucceedTransCount) TransCount,
-	sum(EmallTransSum.SucceedTransAmount) TransAmount
-into 
-	#EmallTransSum
-from	
-	Table_EmallTransSum EmallTransSum
-	inner join
-	Table_BranchOfficeNameRule BranchOfficeNameRule
+	left join 
+	Table_MerInfo
 	on
-		EmallTransSum.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
-where 
-	EmallTransSum.TransDate >= @CurrStartDate
-	and
-	EmallTransSum.TransDate < @CurrEndDate
-	and
-	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName
-group by
-	EmallTransSum.MerchantNo,
-	EmallTransSum.MerchantName;
-	
+		FactDailyTrans.MerchantNo = Table_MerInfo.MerchantNo;
+		
+
 
 --4. Get table Merchant With BranchOffice
 select
@@ -113,10 +217,12 @@ from
 	inner join
 	Table_SalesDeptConfiguration SalesDeptConfiguration
 	on
-		BranchOfficeNameRule.UnnormalBranchOfficeName = SalesDeptConfiguration.BranchOffice
-where 
-	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName
-union 
+		SalesDeptConfiguration.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+		and
+		ISNULL(BranchOfficeNameRule.NormalBranchOfficeName,N'') <> N''
+where
+	BranchOfficeNameRule.NormalBranchOfficeName = @BranchOfficeName
+union
 select
 	Finance.MerchantNo
 from
@@ -124,17 +230,19 @@ from
 	inner join
 	Table_FinancialDeptConfiguration Finance
 	on
-		BranchOfficeNameRule.UnnormalBranchOfficeName = Finance.BranchOffice
-where 
-	BranchOfficeNameRule.UnionPaySpec = @BranchOfficeName;
-	
+		Finance.BranchOffice = BranchOfficeNameRule.UnnormalBranchOfficeName
+		and
+		ISNULL(BranchOfficeNameRule.NormalBranchOfficeName,N'') <> N''
+where
+	BranchOfficeNameRule.NormalBranchOfficeName = @BranchOfficeName;
+
 	
 --5. Get TransDetail respectively
 select
 	OraTransSum.MerchantName,
 	OraTransSum.MerchantNo,
-	OraTransSum.TransCount,
-	OraTransSum.TransAmount
+	OraTransSum.TransCnt,
+	OraTransSum.TransAmt
 into
 	#OraTransWithBO
 from
@@ -147,56 +255,72 @@ from
 select
 	FactDailyTrans.MerchantName,
 	FactDailyTrans.MerchantNo,
-	FactDailyTrans.SucceedTransCount as TransCount,
-	FactDailyTrans.SucceedTransAmount as TransAmount
+	FactDailyTrans.TransCnt as TransCount,
+	FactDailyTrans.TransAmt as TransAmount
 into
 	#FactDailyTransWithBO
 from
-	#FactDailyTrans FactDailyTrans
+	#FactDailyTransAndUPOP FactDailyTrans
 	inner join
 	#MerWithBranchOffice MerWithBranchOffice
 	on
 		FactDailyTrans.MerchantNo = MerWithBranchOffice.MerchantNo;
 
-	
+
 --5. Union all Trans
 select
 	MerchantName,
 	MerchantNo,
-	TransCount,
-	convert(decimal, TransAmount)/100.0 TransAmount
+	TransCnt,
+	convert(decimal, TransAmt)/100.0 TransAmt
+into
+	#TempResult
 from
 	(select
 		MerchantName,
 		MerchantNo,
-		TransCount,
-		TransAmount
+		TransCnt,
+		TransAmt
 	from
 		#OraTransWithBO	
 	union all
 	select 
 		MerchantName,
 		MerchantNo,
-		TransCount,
-		TransAmount
+		TransCount as TransCnt,
+		TransAmount as TransAmt
 	from
 		#FactDailyTransWithBO	
-	union all
-	select
-		MerchantName,
-		MerchantNo,
-		TransCount,
-		TransAmount
-	from
-		#EmallTransSum) Mer; 
-	
+	) Mer;
+
+
+update 
+	#TempResult
+set
+	#TempResult.MerchantNo = Table_CpUpopRelation.UpopMerNo
+from
+	#TempResult
+	inner join
+	Table_CpUpopRelation
+	on
+		#TempResult.MerchantNo = Table_CpUpopRelation.CpMerNo
+where
+	#TempResult.MerchantNo = Table_CpUpopRelation.CpMerNo;
+
+
+select
+	*
+from
+	#TempResult
+
+
 
 --6. drop temp table
 drop table #OraTransSum;
-drop table #FactDailyTrans;
-drop table #EmallTransSum;
+drop table #FactDailyTransAndUPOP;
 drop table #OraTransWithBO;
 drop table #FactDailyTransWithBO;
+drop table #TempResult;
 
 end
 
