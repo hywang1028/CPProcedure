@@ -537,7 +537,7 @@ With SalesBranchOffice as
 		left join 
 		Table_MerAttribute Mer
 		on
-			Sales.MerchantNo = Mer.MerchantNo 
+			Sales.MerchantNo = Mer.MerchantNo
 ),
 FinanceBranchOffice as
 (
@@ -825,7 +825,8 @@ Drop table #Result;
 
 End
 
----------------------------------------------------------------------------------TEST DATA
+---------------------------------------------------------------------------------
+--TEST DATA
 -----1.
 --select SUM(TransAmt)TransAmt,SUM(TransCnt)TransCnt from #PaymentTransData
 --union all
@@ -903,5 +904,3 @@ End
 --	CPDate >= '2013-05-01'
 --	and
 --	CPDate < '2013-06-01'
----3.
-----1. = 2.
