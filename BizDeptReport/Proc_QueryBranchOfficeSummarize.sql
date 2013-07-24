@@ -30,7 +30,7 @@ if (@PeriodUnit = N'ÔÂ')
 begin
 	set @CurrStartDate = LEFT(CONVERT(char,@StartDate,120),7) + '-01';
 	set @CurrEndDate = DATEADD(month,1,@CurrStartDate);
-end
+end	
 else if(@PeriodUnit = N'¼¾¶È')
 begin
 	set @CurrStartDate = LEFT(CONVERT(char,@StartDate,120),7) + '-01';
@@ -473,22 +473,26 @@ select
 	CONVERT(decimal,TempResult.B2BTransCnt)/10000 B2BTransCnt,
 	CONVERT(decimal,TempResult.DeductTransCnt)/10000 DeductTransCnt,
 	CONVERT(decimal,TempResult.ORATransCnt)/10000 ORATransCnt,
-	CONVERT(decimal,FundData.TransCnt)/10000 FundTransCnt,
+	ISNULL(CONVERT(decimal,FundData.TransCnt),0)/10000 FundTransCnt,  
 	CONVERT(decimal,TempResult.B2CNoUPOPTransAmt)/1000000 B2CNoUPOPTransAmt,
 	CONVERT(decimal,TempResult.UPOPTransAmt)/1000000 UPOPTransAmt,
 	CONVERT(decimal,TempResult.B2BTransAmt)/1000000 B2BTransAmt,
 	CONVERT(decimal,TempResult.DeductTransAmt)/1000000 DeductTransAmt,
 	CONVERT(decimal,TempResult.ORATransAmt)/1000000 ORATransAmt,
-	CONVERT(decimal,FundData.TransAmt)/1000000 FundTransAmt,
-	CONVERT(decimal,TempResult.B2CNoUPOPTransAmt+TempResult.UPOPTransAmt+TempResult.B2BTransAmt+TempResult.DeductTransAmt+TempResult.ORATransAmt+FundData.TransAmt)/1000000 AllData
+	ISNULL(CONVERT(decimal,FundData.TransAmt),0)/1000000 FundTransAmt,  
+	CONVERT(decimal,TempResult.B2CNoUPOPTransAmt+TempResult.UPOPTransAmt+TempResult.B2BTransAmt+TempResult.DeductTransAmt+TempResult.ORATransAmt+ISNULL(FundData.TransAmt,0))/1000000 AllData
 from
 	TempResult
-	inner join
+	left join
 	#FundData FundData
 	on
 		TempResult.BranchOffice = FundData.BranchOffice
+where  
+	TempResult.BranchOffice <> ''  
+	or  
+	TempResult.BranchOffice <> null  
 order by
-	CONVERT(decimal,TempResult.B2CNoUPOPTransAmt+TempResult.UPOPTransAmt+TempResult.B2BTransAmt+TempResult.DeductTransAmt+TempResult.ORATransAmt+FundData.TransAmt)/1000000 desc;
+	CONVERT(decimal,TempResult.B2CNoUPOPTransAmt+TempResult.UPOPTransAmt+TempResult.B2BTransAmt+TempResult.DeductTransAmt+TempResult.ORATransAmt+ISNULL(FundData.TransAmt,0))/1000000 desc;  
 
 
 --With #Sum as

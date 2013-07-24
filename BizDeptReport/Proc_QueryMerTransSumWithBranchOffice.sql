@@ -9,10 +9,10 @@ go
 
 Create Procedure Proc_QueryMerTransSumWithBranchOffice
 	@StartDate datetime = '2012-11-01',
-	@PeriodUnit nChar(4) = N'自定义',
+	@PeriodUnit nChar(5) = N'自定义',
 	@EndDate datetime = '2012-11-29',
-	@BranchOfficeName nChar(15) = N'北京银联商务有限公司'
-as 
+	@BranchOfficeName nChar(30) = N'银联商务有限公司四川分公司'
+as
 begin
 
 --1. Check Input
@@ -20,7 +20,6 @@ if (@StartDate is null or ISNULL(@PeriodUnit,N'') = N'' or ISNULL(@BranchOfficeN
 begin
 	raiserror(N'Input params cannot be empty in Proc_QueryMerTransSumWithBranchOffice',16,1);
 end
-
 
 --2. Prepare StartDate and EndDate
 declare @CurrStartDate datetime;
@@ -49,7 +48,7 @@ begin
 end;
 
 
---3.Get ORA_Data and Tra_Data
+--3.Get NewORA_Deduct_Data and Tra_Data
 With ORATransData as
 (
 	select
