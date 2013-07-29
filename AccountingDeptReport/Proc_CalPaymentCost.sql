@@ -4,6 +4,7 @@
 --[Modified] At 2012-03-21 By Chen.wu  Add @HisRefDate param
 --[Modified] At 2012-05-25 By Õı∫Ï—‡  Add @ConvertToRMB param
 --[Modified] At 2013-05-28 By Chen.wu Add ByUpop Category
+--[Modified] At 2013-07-29 By Chen.wu Modify column SubCostRuleValue(#GateMerRule), FeeValue(#CostRuleByUpop) to decimal(16,5)
 
 if OBJECT_ID(N'Proc_CalPaymentCost',N'P') is not null
 begin
@@ -109,7 +110,7 @@ create table #GateMerRule
 	ApplyDate datetime,
 	NextApplyDate datetime,
 	SubCostRuleType varchar(15),
-	SubCostRuleValue decimal(15,4)
+	SubCostRuleValue decimal(16,5)
 );
 
 if @HisRefDate is not null
@@ -755,7 +756,7 @@ create table #CostRuleByUpop
 	CostRuleType nvarchar(10),
 	RuleObject varchar(15),
 	FeeType varchar(15),
-	FeeValue decimal(15,4),
+	FeeValue decimal(16,5),
 	ApplyDate date,
 	primary key (RuleObject, ApplyDate)
 );
