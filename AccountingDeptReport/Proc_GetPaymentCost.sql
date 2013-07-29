@@ -1,6 +1,9 @@
 --Created At 2013-07-09 By Richard Wu
 --Cached CalPaymentCost
 
+--Modified At 2013-07-29 By Richard Wu
+--@EndDate cannot larger than yesterday, since Table_FeeCalResult(FeeEndDate) T-2
+
 if OBJECT_ID(N'Proc_GetPaymentCost', N'P') is not null
 begin
 	drop procedure Proc_GetPaymentCost
@@ -19,7 +22,12 @@ begin
 --1. Check input
 if(@StartDate is null or @EndDate is null or @StartDate >= @EndDate)  
 begin  
- raiserror(N'Invalid StartDate and EndDate input',16,1);  
+	raiserror(N'Invalid StartDate and EndDate input',16,1);  
+end
+
+if @EndDate > dateadd(day, -1, GETDATE())
+begin
+	set @EndDate = dateadd(day, -1, GETDATE())
 end
 
 --2. Get latest Table_CachePaymentCostLog record info
