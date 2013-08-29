@@ -8,7 +8,7 @@ go
 
 create procedure Proc_QueryNewReceiptAndORATransReport
 	@StartDate datetime = '2013-05-01',
-	@EndDate datetime = '2013-05-01',
+	@EndDate datetime = '2013-05-31',
 	@BizType nvarchar(5) = N'全部',
 	@PeriodUnit nchar(5) = N'自定义'
 as
@@ -29,32 +29,32 @@ declare @CurrEndDate datetime;
 if(@PeriodUnit = N'周')
 begin
     set @CurrStartDate = @StartDate;
-    set @CurrEndDate = DATEADD(day,-1,DATEADD(week, 1, @StartDate));
+    set @CurrEndDate = DATEADD(week, 1, @StartDate);
 end
 else if(@PeriodUnit = N'月')
 begin
     set @CurrStartDate = @StartDate;
-    set @CurrEndDate = DATEADD(day,-1,DATEADD(MONTH, 1, @StartDate));
+    set @CurrEndDate = DATEADD(MONTH, 1, @StartDate);
 end
 else if(@PeriodUnit = N'季度')
 begin
     set @CurrStartDate = @StartDate;
-    set @CurrEndDate = DATEADD(day,-1,DATEADD(QUARTER, 1, @StartDate));
+    set @CurrEndDate = DATEADD(QUARTER, 1, @StartDate);
 end
 else if(@PeriodUnit = N'半年')
 begin
     set @CurrStartDate = @StartDate;
-    set @CurrEndDate = DATEADD(day,-1,DATEADD(QUARTER, 2, @StartDate));
+    set @CurrEndDate = DATEADD(QUARTER, 2, @StartDate);
 end
 else if(@PeriodUnit = N'年')
 begin
     set @CurrStartDate = @StartDate;
-    set @CurrEndDate = DATEADD(day,-1,DATEADD(YEAR, 1, @StartDate));
+    set @CurrEndDate = DATEADD(YEAR, 1, @StartDate);
 end
 else if(@PeriodUnit = N'自定义')
 begin
     set @CurrStartDate = @StartDate;
-    set @CurrEndDate = @EndDate;
+    set @CurrEndDate = DATEADD(day,1,@EndDate);
 end
 
 
@@ -126,7 +126,7 @@ begin
 		CostAmt
 	)
 	exec Proc_CalTraCost
-		@StartDate,
+		@CurrStartDate,
 		@CurrEndDate
 end;
 

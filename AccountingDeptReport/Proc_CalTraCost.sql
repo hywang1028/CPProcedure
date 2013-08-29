@@ -16,10 +16,8 @@ begin
 	raiserror(N'Input params cannot be empty in Proc_CalTraCost',16,1);
 end
 
---2. Adjust @EndDate
-set @EndDate = DATEADD(day,1,@EndDate);
 
---3. Calculate cost
+--2. Calculate cost
 select
 	tra.MerchantNo,
 	tra.ChannelNo,
@@ -66,6 +64,3 @@ where
 
 
 end
-
-
-
