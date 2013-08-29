@@ -1,4 +1,5 @@
 --[Modified] at 2012-07-13 by Õı∫Ï—‡  Description:Add Financial Dept Configuration Data
+--[Modified] at 2013-07-12 by ∂°ø°Íª  Description:Add UPOP Data And TraScreenSum Data
 if OBJECT_ID(N'Proc_QueryUnionMerTransSum',N'P') is not null
 begin
 	drop procedure Proc_QueryUnionMerTransSum;
