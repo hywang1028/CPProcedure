@@ -25,6 +25,7 @@ end
 declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 
+
 if(@PeriodUnit = N'ÔÂ')
 begin
 	set @CurrStartDate = left(CONVERT(char,@StartDate,120),7) + '-01';
@@ -101,6 +102,8 @@ where
 select
 	MerOpenAccountInfo.MerchantName,
 	MerOpenAccountInfo.MerchantNo
+into
+	#Result
 from
 	#MerOpenAccountInfo MerOpenAccountInfo
 	inner join
@@ -109,8 +112,26 @@ from
 		MerOpenAccountInfo.MerchantNo = MerWithBranch.MerchantNo;
 
 
+--6. Update MerchantNo
+update 
+	#Result
+set
+	#Result.MerchantNo = Table_CpUpopRelation.UpopMerNo
+from
+	#Result
+	inner join
+	Table_CpUpopRelation
+	on
+		#Result.MerchantNo = Table_CpUpopRelation.CpMerNo;
+
+--7. Result
+select * from #Result;
+	
+
+
 --6. drop temp table
 drop table #MerOpenAccountInfo;
 drop table #MerWithBranch;
+drop table #Result;
 
 end

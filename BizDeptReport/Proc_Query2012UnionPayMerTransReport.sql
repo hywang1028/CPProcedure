@@ -24,6 +24,7 @@ end
 declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 
+
 if(@PeriodUnit = N'‘¬')
 begin
     set @CurrStartDate = @StartDate;
@@ -490,8 +491,8 @@ from
 --3.2.3 Join All Config Data
 select
 	ISNULL(AllMerTrans.BranchOffice,N'') BranchOffice,
-	coalesce(AllMerTrans.MerchantNo,PayMer.MerchantNo,ORAMer.MerchantNo) MerchantNo,
-	coalesce(AllMerTrans.MerchantName,PayMer.MerchantName,ORAMer.MerchantName) MerchantName,
+	coalesce(AllMerTrans.MerchantNo,PayMer.MerchantNo,ORAMer.MerchantNo,Tra.MerchantNo) MerchantNo,
+	coalesce(AllMerTrans.MerchantName,PayMer.MerchantName,ORAMer.MerchantName,Tra.MerchantName) MerchantName,
 	N'88020000' as InstuNo,
 	case when ISNULL(Industry.UnionPayIndustryName,N'')=N'' and ISNULL(AllMerTrans.IndustryName,N'')=N'' then N'Œ¥≈‰÷√'
 		 when ISNULL(Industry.UnionPayIndustryName,N'')=N'' and ISNULL(AllMerTrans.IndustryName,N'')<>N'' then N'∆‰À¸'
@@ -519,6 +520,10 @@ from
 	(select * from Table_OraMerchants where OpenTime < @CurrEndDate) ORAMer
 	on
 		coalesce(AllMerTrans.MerchantNo,PayMer.MerchantNo) = ORAMer.MerchantNo
+	full outer join 
+	(select * from Table_TraMerchantInfo) Tra
+	on
+		coalesce(AllMerTrans.MerchantNo,PayMer.MerchantNo,ORAMer.MerchantNo) = Tra.MerchantNo
 	left join
 	Table_IndustryNameRule Industry
 	on
