@@ -1,6 +1,9 @@
 --Created By 王红燕 2013-06-06 报表名称:网关投入产出表_子表3_考核版网关成本率与收入率统计
 --Input:StartDate，PeriodUnit，EndDate
 --Output:考核口径版,平均银行成本率,银行成本占比,平均收入率,收入占比
+
+--Modified By Richard Wu 2013-07-23 Use Proc_GetPaymentCost replace Proc_CalPaymentCost
+
 if OBJECT_ID(N'Proc_QueryPartGateFeeRatioIOReport', N'P') is not null
 begin
 	drop procedure Proc_QueryPartGateFeeRatioIOReport;
@@ -65,7 +68,7 @@ create table #CurrPayCost
 insert into 
 	#CurrPayCost
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_GetPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 
 --Current Ora Trans
 create table #CurrOraCost
