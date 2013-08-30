@@ -5,6 +5,7 @@
 --[Modified] At 2012-05-25 By Õı∫Ï—‡  Add @ConvertToRMB param
 --[Modified] At 2013-05-28 By Chen.wu Add ByUpop Category
 --[Modified] At 2013-07-29 By Chen.wu Modify column SubCostRuleValue(#GateMerRule), FeeValue(#CostRuleByUpop) to decimal(16,5)
+--[Modified} At 2013-08-16 By Chen.wu change Table_CpUpopRelation to Table_CupsMerInfo
 
 if OBJECT_ID(N'Proc_CalPaymentCost',N'P') is not null
 begin
@@ -822,9 +823,11 @@ set
 from
 	#GateMerRule GateMerRule
 	inner join
-	Table_CpUpopRelation CpUpop
+	Table_CupsMerInfo CpUpop
 	on
 		GateMerRule.MerchantNo = CpUpop.CpMerNo
+		and
+		GateMerRule.GateNo = CpUpop.GateNo
 	cross apply
 	(select top(1)
 		FeeType,
@@ -834,7 +837,7 @@ from
 	where
 		CostRuleType = N'ByMer'
 		and
-		RuleObject = CpUpop.UpopMerNo
+		RuleObject = CpUpop.CupsMerNo
 		and
 		ApplyDate <= GateMerRule.FeeEndDate
 	order by
@@ -853,9 +856,11 @@ set
 from
 	#GateMerRule GateMerRule
 	inner join
-	Table_CpUpopRelation CpUpop
+	Table_CupsMerInfo CpUpop
 	on
 		GateMerRule.MerchantNo = CpUpop.CpMerNo
+		and
+		GateMerRule.GateNo = CpUpop.GateNo
 	cross apply
 	(select top(1)
 		FeeType,
@@ -865,7 +870,7 @@ from
 	where
 		CostRuleType = N'ByMcc'
 		and
-		RuleObject = SUBSTRING(CpUpop.UpopMerNo,8,4)
+		RuleObject = SUBSTRING(CpUpop.CupsMerNo,8,4)
 		and
 		ApplyDate <= GateMerRule.FeeEndDate
 	order by
