@@ -1,3 +1,5 @@
+--Modified by Chen.wu on 2013-9-29 using SucceedCnt,SucceedAmt to calculate CostAmt
+
 if OBJECT_ID(N'Proc_CalTraCost', N'P') is not null
 begin
 	drop procedure Proc_CalTraCost
@@ -35,11 +37,11 @@ select
 	case when 
 		costRule.FeeType = 'Fixed'
 	then
-		tra.CalCostCnt * costRule.FeeValue
+		tra.SucceedCnt * costRule.FeeValue
 	when
 		costRule.FeeType = 'Percent'
 	then
-		tra.CalCostAmt * costRule.FeeValue
+		tra.SucceedAmt * costRule.FeeValue
 	else
 		0
 	end CostAmt
