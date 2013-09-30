@@ -2,6 +2,7 @@
 --[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 --[Modified] At 20130416 By 王红燕：Modify Biz Category and Cost Calc Format
+--[Modified] At 20130929 By 王红燕：Add Table_TraScreenSum Trans Data
 if OBJECT_ID(N'Proc_QueryFinancialDeptKPIReport', N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialDeptKPIReport;
@@ -9,8 +10,8 @@ end
 go
 
 create procedure Proc_QueryFinancialDeptKPIReport
-	@StartDate datetime = '2013-01-01',
-	@EndDate datetime = '2013-03-31'
+	@StartDate datetime = '2013-07-01',
+	@EndDate datetime = '2013-09-30'
 as
 begin
 
@@ -140,6 +141,27 @@ from
 	Table_OraAdditionalFeeRule MerRate
 	on
 		Ora.MerchantNo = MerRate.MerchantNo;
+
+--3.0.3 Get Table_TraScreenSum Trans Data
+create table #CalTraCost
+(	
+	MerchantNo char(15),
+	ChannelNo char(6),	
+	TransType varchar(20),	
+	CPDate date,
+	TotalCnt int,	
+	TotalAmt decimal(15,2),	
+	SucceedCnt int,	
+	SucceedAmt decimal(15,2),	
+	CalFeeCnt int,	
+	CalFeeAmt decimal(15,2),	
+	CalCostCnt int,	
+	CalCostAmt decimal(15,2),	
+	FeeAmt decimal(15,2),
+	CostAmt decimal(15,2)
+)
+insert into #CalTraCost
+exec Proc_CalTraCost @CurrStartDate,@CurrEndDate;
 
 With PaymentData as
 (
@@ -379,6 +401,27 @@ FinanceOraTransData as
 	where
 		Finance.GateNo = 'all'
 ),
+TraScreenSum as
+(
+	select
+		Finance.BizCategory,
+		Finance.MerchantNo,
+		'代收付' as UpdateFlag,
+		(select MerchantName from Table_TraMerchantInfo where MerchantNo = Finance.MerchantNo) as MerchantName,
+		Finance.BelongRate*ISNULL(Ora.SucceedAmt,0)/10000000000.0 TransAmt,
+		Finance.BelongRate*ISNULL(Ora.SucceedCnt,0)/10000.0 TransCnt,
+		Finance.BelongRate*ISNULL(Ora.CostAmt,0)/100.0 as CostAmt, 
+		Finance.BelongRate*ISNULL(Ora.FeeAmt,0)/100.0 FeeAmt,
+		0 as InstuFeeAmt
+	from
+		Table_BelongToFinance Finance
+		inner join
+		#CalTraCost Ora
+		on
+			Finance.MerchantNo = Ora.MerchantNo
+	where
+		Finance.GateNo = 'all'
+),
 --3.1 Prepare Fund Data
 AllTransferData as
 (
@@ -463,7 +506,9 @@ select * from otherTransSum
 union all
 select * from DomesticSum
 union all
-select * from FinanceOraTransData;
+select * from FinanceOraTransData
+union all
+select * from TraScreenSum;
 
 Update 
 	#TempResult
@@ -490,7 +535,7 @@ select
 	BizOrder.OrderID,
 	BizOrder.BizCategory,
 	TempResult.MerchantNo,
-	TempResult.MerchantName,
+	MerInfo.MerchantName,
 	SUM(TempResult.TransAmt) TransAmt,
 	SUM(TempResult.TransCnt) TransCnt,
 	SUM(TempResult.FeeAmt) FeeAmt,
@@ -502,17 +547,30 @@ from
 	#TempResult TempResult
 	on
 		BizOrder.BizCategory = TempResult.BizCategory
+	left join
+	(
+		select
+			MerchantNo,
+			MIN(MerchantName) MerchantName
+		from
+			#TempResult
+		group by
+			MerchantNo
+	)MerInfo
+	on
+		TempResult.MerchantNo = MerInfo.MerchantNo
 group by
 	BizOrder.OrderID,
 	BizOrder.BizCategory,
 	TempResult.MerchantNo,
-	TempResult.MerchantName;
+	MerInfo.MerchantName;
 	
 --5.Drop Temp Table
 Drop table #BizOrder;
 Drop table #ProcResult;
 Drop table #ProcOraCost;
 Drop table #OraTransData;
+Drop table #CalTraCost;
 Drop table #TempResult;
 
 End

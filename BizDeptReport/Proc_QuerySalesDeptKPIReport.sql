@@ -2,6 +2,7 @@
 --[Modified] At 20120627 By 王红燕：Add Finance Ora Trans Data
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 --[Modified] At 20130416 By 王红燕：Modify Biz Category and Cost Calc Format
+--[Modified] At 20130929 By 王红燕：Add Table_TraScreenSum Trans Data
 if OBJECT_ID(N'Proc_QuerySalesDeptKPIReport', N'P') is not null
 begin
 	drop procedure Proc_QuerySalesDeptKPIReport;
@@ -9,8 +10,8 @@ end
 go
 
 create procedure Proc_QuerySalesDeptKPIReport
-	@StartDate datetime = '2013-01-01',
-	@EndDate datetime = '2013-03-31'
+	@StartDate datetime = '2013-07-01',
+	@EndDate datetime = '2013-09-30'
 as
 begin
 
@@ -115,6 +116,7 @@ from
 		Pay.MerchantNo = Finance.MerchantNo;
 
 --3.2 Prepare Ora Trans Data
+--3.2.1 Prepare Old Ora Trans Data
 create table #ProcOraCost
 (
 	BankSettingID char(10) not null,
@@ -172,7 +174,9 @@ from
 	inner join
 	OraFee
 	on
-		OraCost.MerchantNo = OraFee.MerchantNo;
+		OraCost.MerchantNo = OraFee.MerchantNo
+where
+	OraCost.MerchantNo <> '606060290000015';
 		
 update
 	Ora
@@ -207,6 +211,67 @@ from
 	)Finance
 	on
 		Ora.MerchantNo = Finance.MerchantNo;
+
+--3.2.2 Prepare New Ora Trans Data
+create table #CalTraCost
+(	
+	MerchantNo char(15),
+	ChannelNo char(6),	
+	TransType varchar(20),	
+	CPDate date,
+	TotalCnt int,	
+	TotalAmt decimal(15,2),	
+	SucceedCnt int,	
+	SucceedAmt decimal(15,2),	
+	CalFeeCnt int,	
+	CalFeeAmt decimal(15,2),	
+	CalCostCnt int,	
+	CalCostAmt decimal(15,2),	
+	FeeAmt decimal(15,2),
+	CostAmt decimal(15,2)
+)
+insert into #CalTraCost
+exec Proc_CalTraCost @CurrStartDate,@CurrEndDate;
+
+select
+	N'代收付业务' as TypeName,
+	2 as OrderID,
+	TraCost.MerchantNo,
+	(select MerchantName from Table_TraMerchantInfo where MerchantNo = TraCost.MerchantNo) MerchantName,
+	SUM(TraCost.SucceedAmt)/10000000000.0  TransAmt,
+	SUM(TraCost.SucceedCnt)/10000.0 TransCnt,
+	SUM(TraCost.CostAmt)/1000000.0 CostAmt,
+	SUM(TraCost.FeeAmt)/1000000.0 FeeAmt,
+	0 as InstuFeeAmt
+into
+	#TraTransData
+from
+	#CalTraCost TraCost
+group by
+	MerchantNo;
+
+update
+	Tra
+set
+	Tra.TransAmt = (1-Finance.BelongRate)*Tra.TransAmt,
+	Tra.TransCnt = (1-Finance.BelongRate)*Tra.TransCnt,
+	Tra.CostAmt = (1-Finance.BelongRate)*Tra.CostAmt,
+	Tra.FeeAmt = (1-Finance.BelongRate)*Tra.FeeAmt,
+	Tra.InstuFeeAmt = (1-Finance.BelongRate)*Tra.InstuFeeAmt
+from
+	#TraTransData Tra
+	inner join
+	(
+		select
+			MerchantNo,
+			BelongRate
+		from
+			Table_BelongToFinance
+		where
+			GateNo = 'all'
+	)Finance
+	on
+		Tra.MerchantNo = Finance.MerchantNo;
 
 --3.3 Prepare West Union Trans Data
 With WUTransData as
@@ -405,6 +470,8 @@ select * into #Result from B2CTrans
 union all
 select * from #OraAllData
 union all
+select * from #TraTransData
+union all
 select * from DeductionData
 union all
 select * from B2BTrans
@@ -438,30 +505,46 @@ where
 	TypeName in (N'代收付业务');
 
 select
-	TypeName,
-	OrderID,
-	MerchantNo,
-	MerchantName,
-	SUM(TransAmt) TransAmt,
-	SUM(TransCnt) TransCnt,
-	SUM(CostAmt) CostAmt,
-	SUM(FeeAmt) FeeAmt,
-	SUM(InstuFeeAmt) InstuFeeAmt
+	R.TypeName,
+	R.OrderID,
+	R.MerchantNo,
+	B.MerchantName,
+	SUM(R.TransAmt) TransAmt,
+	SUM(R.TransCnt) TransCnt,
+	SUM(R.CostAmt) CostAmt,
+	SUM(R.FeeAmt) FeeAmt,
+	SUM(R.InstuFeeAmt) InstuFeeAmt
 from
-	#Result
+	#Result R
+	inner join
+	(
+		select
+			MerchantNo,
+			MIN(MerchantName) MerchantName
+		from
+			#Result
+		group by
+			MerchantNo
+	)B
+	on
+		R.MerchantNo = B.MerchantNo
+where
+	10000.0*R.TransCnt <> 0
 group by
-	TypeName,
-	OrderID,
-	MerchantNo,
-	MerchantName
+	R.TypeName,
+	R.OrderID,
+	R.MerchantNo,
+	B.MerchantName
 order by
-	OrderID;
+	R.OrderID;
 	
 --5.Drop Temp Table
 Drop table #ProcPayCost;
 Drop table #PayGateMerData;
 Drop table #ProcOraCost;
 Drop table #OraAllData;
+Drop table #CalTraCost;
+Drop table #TraTransData;
 Drop table #Result;
 
 End
