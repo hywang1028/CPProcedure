@@ -1,6 +1,10 @@
 --[Modified] on 2012-06-08 By 王红燕 Description:Add West Union Trans Data
 --[Modified] on 2013-05-16 By 丁俊昊 Description:Add FeeAmt Data and UPOP Data
 --[Modified] on 2013-06-09 By 丁俊昊 Description:Modified Statistical Caliber and Limit OpenTime MerchantNo
+--[Modified] on 2013-09-06 By 丁俊昊 Description:Modify KPI Display,Modify PeriodStartDate Limit from Table_EmployeeKPI
+--[Modified] on 2013-09-24 By 丁俊昊 Description:Add TraScreenSum Data and Modified PeriodStartDate from Table_EmployeeKPI
+--对应前台:2013市场销售部客户经理完成情况汇总表
+
 if OBJECT_ID(N'Proc_QueryCPSalesManagerTransReport', N'P') is not null
 begin
 	drop procedure Proc_QueryCPSalesManagerTransReport;
@@ -30,6 +34,7 @@ declare @LastYearStartDate datetime;
 declare @LastYearEndDate datetime;
 declare @ThisYearRunningStartDate datetime;
 declare @ThisYearRunningEndDate datetime;
+
 
 if(@PeriodUnit = N'周')
 begin
@@ -90,64 +95,99 @@ set @ThisYearRunningStartDate = CONVERT(char(4), YEAR(@CurrStartDate)) + '-01-01
 set @ThisYearRunningEndDate = @CurrEndDate;
 
 --3. Get #CurrCMCData
-select
-	MerchantNo,
-	SUM(PurCnt) as CurrSucceedCount,
-	SUM(PurAmt) as CurrSucceedAmount,
-	SUM(FeeAmt) as CurrFeeAmt
-into
-	#CurrCMCData
-from
-	Table_FeeCalcResult
-where
-	FeeEndDate >= @CurrStartDate
-	and
-	FeeEndDate < @CurrEndDate
-group by
-	MerchantNo;
+with AllFeeCalcData as
+(
+	select
+		MerchantNo,
+		SUM(PurCnt) as CurrSucceedCount,
+		SUM(PurAmt) as CurrSucceedAmount,
+		SUM(FeeAmt) as CurrFeeAmt
+	from
+		Table_FeeCalcResult
+	where
+		FeeEndDate >= @CurrStartDate
+		and
+		FeeEndDate < @CurrEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as CurrSucceedCount,
+		SUM(CalFeeAmt) as CurrSucceedAmount,
+		SUM(FeeAmt) as CurrFeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate <  @CurrEndDate
+		and
+		TransType in ('100004','100001')
+	group by
+		MerchantNo
+)
+	select
+		MerchantNo,
+		SUM(CurrSucceedCount) as CurrSucceedCount,
+		SUM(CurrSucceedAmount) as CurrSucceedAmount,
+		SUM(CurrFeeAmt) as CurrFeeAmt
+	into
+		#CurrCMCData
+	from
+		AllFeeCalcData
+	group by
+		MerchantNo;
 
 
 --3.1 Get #CurrORAData
-select
-	BankSettingID,
-	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataC
-from
-	Table_OraTransSum
-where
-	CPDate >= @CurrStartDate
-	and
-	CPDate < @CurrEndDate;
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataC ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-select
-	MerchantNo,
-	SUM(TransCount) as CurrSucceedCount,
-	SUM(TransAmount) as CurrSucceedAmount,
-	(select SUM(#ORADataC.FeeAmount) from #ORADataC where MerchantNo = Table_OraTransSum.MerchantNo) CurrFeeAmt
-into
-	#CurrORAData
-from
-	Table_OraTransSum
-where
-	CPDate >= @CurrStartDate
-	and
-	CPDate < @CurrEndDate
-group by
-	MerchantNo;
+with AllOra as
+(
+	select
+		MerchantNo,
+		SUM(TransCount) as CurrSucceedCount,
+		SUM(TransAmount) as CurrSucceedAmount,
+		SUM(FeeAmount) as CurrFeeAmt
+	from
+		Table_OraTransSum
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate < @CurrEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as CurrSucceedCount,
+		SUM(CalFeeAmt) as CurrSucceedAmount,
+		SUM(FeeAmt) as CurrFeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate <  @CurrEndDate
+		and
+		TransType in ('100002','100005')
+	group by
+		MerchantNo
+)
+	select
+		AllOra.MerchantNo,
+		SUM(CurrSucceedCount) CurrSucceedCount,
+		SUM(CurrSucceedAmount) CurrSucceedAmount,
+		SUM(isnull(AllOra.CurrSucceedCount * Additional.FeeValue, AllOra.CurrFeeAmt)) as CurrFeeAmt
+	into
+		#CurrORAData
+	from
+		AllOra
+		left join
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllOra.MerchantNo = Additional.MerchantNo
+	group by
+		AllOra.MerchantNo;
 
 
 --3.2 Get #CurrWUData
@@ -257,64 +297,99 @@ from
 
 
 --4. Get #PrevCMCData
-select
-	MerchantNo,
-	SUM(PurCnt) as PrevSucceedCount,
-	SUM(PurAmt) as PrevSucceedAmount,
-	SUM(FeeAmt) as PrevFeeAmt
-into
-	#PrevCMCData
-from
-	Table_FeeCalcResult
-where
-	FeeEndDate >= @PrevStartDate
-	and
-	FeeEndDate < @PrevEndDate
-group by
-	MerchantNo;
+with AllFeeCalcData as
+(
+	select
+		MerchantNo,
+		SUM(PurCnt) as PrevSucceedCount,
+		SUM(PurAmt) as PrevSucceedAmount,
+		SUM(FeeAmt) as PrevFeeAmt
+	from
+		Table_FeeCalcResult
+	where
+		FeeEndDate >= @PrevStartDate
+		and
+		FeeEndDate < @PrevEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as PrevSucceedCount,
+		SUM(CalFeeAmt) as PrevSucceedAmount,
+		SUM(FeeAmt) as PrevFeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @PrevStartDate
+		and
+		CPDate <  @PrevEndDate
+		and
+		TransType in ('100004','100001')
+	group by
+		MerchantNo
+)
+	select
+		MerchantNo,
+		SUM(PrevSucceedCount) as PrevSucceedCount,
+		SUM(PrevSucceedAmount) as PrevSucceedAmount,
+		SUM(PrevFeeAmt) as PrevFeeAmt
+	into
+		#PrevCMCData
+	from
+		AllFeeCalcData
+	group by
+		MerchantNo;
 
 
 --4.1 Get #PrevORAData
-select
-	BankSettingID,
-	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataP
-from
-	Table_OraTransSum
-where
-	CPDate >= @PrevStartDate
-	and
-	CPDate < @PrevEndDate;
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataP ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-select
-	MerchantNo,
-	SUM(TransCount) as PrevSucceedCount,
-	SUM(TransAmount) as PrevSucceedAmount,
-	(select SUM(#ORADataP.FeeAmount) from #ORADataP where MerchantNo = Table_OraTransSum.MerchantNo) PrevFeeAmt
-into
-	#PrevORAData
-from
-	Table_OraTransSum
-where
-	CPDate >= @PrevStartDate
-	and
-	CPDate < @PrevEndDate
-group by
-	MerchantNo;
+with AllOra as
+(
+	select
+		MerchantNo,
+		SUM(TransCount) as TransCnt,
+		SUM(TransAmount) as TransAmt,
+		SUM(FeeAmount) as FeeAmt
+	from
+		Table_OraTransSum
+	where
+		CPDate >= @PrevStartDate
+		and
+		CPDate < @PrevEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as TransCnt,
+		SUM(CalFeeAmt) as TransAmt,
+		SUM(FeeAmt) as FeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @PrevStartDate
+		and
+		CPDate <  @PrevEndDate
+		and
+		TransType in ('100002','100005')
+	group by
+		MerchantNo
+)
+	select
+		AllOra.MerchantNo,
+		SUM(TransCnt) PrevSucceedCount,
+		SUM(TransAmt) PrevSucceedAmount,
+		SUM(isnull(AllOra.TransCnt * Additional.FeeValue, AllOra.FeeAmt)) as PrevFeeAmt
+	into
+		#PrevORAData
+	from
+		AllOra
+		left join 
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllOra.MerchantNo = Additional.MerchantNo
+	group by
+		AllOra.MerchantNo;
 
 
 --4.2 Get #PrevWUData
@@ -391,64 +466,99 @@ select * from #PrevWUData;
 		
 
 --5. Get #LastYearCMCData
-select
-	MerchantNo,
-	SUM(PurCnt) as LastYearSucceedCount,
-	SUM(PurAmt) as LastYearSucceedAmount,
-	SUM(FeeAmt) as LastYearFeeAmt
-into
-	#LastYearCMCData
-from
-	Table_FeeCalcResult
-where
-	FeeEndDate >= @LastYearStartDate
-	and
-	FeeEndDate < @LastYearEndDate
-group by
-	MerchantNo;
+with AllFeeCalcData as
+(
+	select
+		MerchantNo,
+		SUM(PurCnt) as LastYearSucceedCount,
+		SUM(PurAmt) as LastYearSucceedAmount,
+		SUM(FeeAmt) as LastYearFeeAmt
+	from
+		Table_FeeCalcResult
+	where
+		FeeEndDate >= @LastYearStartDate
+		and
+		FeeEndDate < @LastYearEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as LastYearSucceedCount,
+		SUM(CalFeeAmt) as LastYearSucceedAmount,
+		SUM(FeeAmt) as LastYearFeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @LastYearStartDate
+		and
+		CPDate <  @LastYearEndDate
+		and
+		TransType in ('100004','100001')
+	group by
+		MerchantNo
+)
+	select
+		MerchantNo,
+		SUM(LastYearSucceedCount) as LastYearSucceedCount,
+		SUM(LastYearSucceedAmount) as LastYearSucceedAmount,
+		SUM(LastYearFeeAmt) as LastYearFeeAmt
+	into
+		#LastYearCMCData
+	from
+		AllFeeCalcData
+	group by
+		MerchantNo;
 
 
 --5.1 Get #LastYearORAData
-select
-	BankSettingID,
-	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataL
-from
-	Table_OraTransSum
-where
-	CPDate >= @LastYearStartDate
-	and
-	CPDate < @LastYearEndDate;
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataL ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-select
-	MerchantNo,
-	SUM(TransCount) as LastYearSucceedCount,
-	SUM(TransAmount) as LastYearSucceedAmount,
-	(select SUM(#ORADataL.FeeAmount) from #ORADataL where MerchantNo = Table_OraTransSum.MerchantNo) LastYearFeeAmt
-into
-	#LastYearORAData
-from
-	Table_OraTransSum
-where
-	CPDate >= @LastYearStartDate
-	and
-	CPDate < @LastYearEndDate
-group by
-	MerchantNo;
+with AllOra as
+(
+	select
+		MerchantNo,
+		SUM(TransCount) as TransCnt,
+		SUM(TransAmount) as TransAmt,
+		SUM(FeeAmount) as FeeAmt
+	from
+		Table_OraTransSum
+	where
+		CPDate >= @LastYearStartDate
+		and
+		CPDate < @LastYearEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as TransCnt,
+		SUM(CalFeeAmt) as TransAmt,
+		SUM(FeeAmt) as FeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @LastYearStartDate
+		and
+		CPDate <  @LastYearEndDate
+		and
+		TransType in ('100002','100005')
+	group by
+		MerchantNo
+)
+	select
+		AllOra.MerchantNo,
+		SUM(TransCnt) LastYearSucceedCount,
+		SUM(TransAmt) LastYearSucceedAmount,
+		SUM(isnull(AllOra.TransCnt * Additional.FeeValue, AllOra.FeeAmt)) as LastYearFeeAmt
+	into
+		#LastYearORAData
+	from
+		AllOra
+		left join 
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllOra.MerchantNo = Additional.MerchantNo
+	group by
+		AllOra.MerchantNo;
 
 
 --5.2 Get #LastYearWUData
@@ -488,7 +598,7 @@ where
 	and
 	TransDate < @LastYearEndDate
 group by
-	Mer.CPMerchantNo
+	Mer.CPMerchantNo;
 
 
 --5.4 LastYear All Data
@@ -558,64 +668,99 @@ from
 
 
 --6. Get #ThisYearCMCData
-select
-	MerchantNo,
-	SUM(PurCnt) as ThisYearSucceedCount,
-	SUM(PurAmt) as ThisYearSucceedAmount,
-	SUM(FeeAmt) as ThisYearFeeAmt
-into
-	#ThisYearCMCData
-from
-	Table_FeeCalcResult
-where
-	FeeEndDate >= @ThisYearRunningStartDate
-	and
-	FeeEndDate < @ThisYearRunningEndDate
-group by
-	MerchantNo;
+with AllFeeCalcData as
+(
+	select
+		MerchantNo,
+		SUM(PurCnt) as ThisYearSucceedCount,
+		SUM(PurAmt) as ThisYearSucceedAmount,
+		SUM(FeeAmt) as ThisYearFeeAmt
+	from
+		Table_FeeCalcResult
+	where
+		FeeEndDate >= @ThisYearRunningStartDate
+		and
+		FeeEndDate < @ThisYearRunningEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as ThisYearSucceedCount,
+		SUM(CalFeeAmt) as ThisYearSucceedAmount,
+		SUM(FeeAmt) as ThisYearFeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @ThisYearRunningStartDate
+		and
+		CPDate <  @ThisYearRunningEndDate
+		and
+		TransType in ('100004','100001')
+	group by
+		MerchantNo
+)
+	select
+		MerchantNo,
+		SUM(ThisYearSucceedCount) as ThisYearSucceedCount,
+		SUM(ThisYearSucceedAmount) as ThisYearSucceedAmount,
+		SUM(ThisYearFeeAmt) as ThisYearFeeAmt
+	into
+		#ThisYearCMCData
+	from
+		AllFeeCalcData
+	group by
+		MerchantNo;
 
 
 --6.1 Get #ThisYearORAData
-select
-	BankSettingID,
-	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataT
-from
-	Table_OraTransSum
-where
-	CPDate >= @ThisYearRunningStartDate
-	and
-	CPDate < @ThisYearRunningEndDate;
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataT ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-select
-	MerchantNo,
-	SUM(TransCount) as ThisYearSucceedCount,
-	SUM(TransAmount) as ThisYearSucceedAmount,
-	(select SUM(#ORADataT.FeeAmount) from #ORADataT where MerchantNo = Table_OraTransSum.MerchantNo) ThisYearFeeAmt
-into
-	#ThisYearORAData
-from
-	Table_OraTransSum
-where
-	CPDate >= @ThisYearRunningStartDate
-	and
-	CPDate < @ThisYearRunningEndDate
-group by
-	MerchantNo;
+with AllOra as
+(
+	select
+		MerchantNo,
+		SUM(TransCount) as TransCnt,
+		SUM(TransAmount) as TransAmt,
+		SUM(FeeAmount) as FeeAmt
+	from
+		Table_OraTransSum
+	where
+		CPDate >= @ThisYearRunningStartDate
+		and
+		CPDate < @ThisYearRunningEndDate
+	group by
+		MerchantNo
+	union all
+	select
+		MerchantNo,
+		SUM(CalFeeCnt) as TransCnt,
+		SUM(CalFeeAmt) as TransAmt,
+		SUM(FeeAmt) as FeeAmt		
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @ThisYearRunningStartDate
+		and
+		CPDate <  @ThisYearRunningEndDate
+		and
+		TransType in ('100002','100005')
+	group by
+		MerchantNo
+)
+	select
+		AllOra.MerchantNo,
+		SUM(TransCnt) ThisYearSucceedCount,
+		SUM(TransAmt) ThisYearSucceedAmount,
+		SUM(isnull(AllOra.TransCnt * Additional.FeeValue, AllOra.FeeAmt)) as ThisYearFeeAmt
+	into
+		#ThisYearORAData
+	from
+		AllOra
+		left join 
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllOra.MerchantNo = Additional.MerchantNo
+	group by
+		AllOra.MerchantNo;
 
 
 --6.2 Get #ThisYearWUData
@@ -870,10 +1015,8 @@ from
 		*
 	 from
 		Table_EmployeeKPI 
-	 where
-		PeriodStartDate >= @ThisYearRunningStartDate
-		and 
-		PeriodStartDate <  @ThisYearRunningEndDate
+	 where  
+		PeriodStartDate = CONVERT(char(4), YEAR(case when @PeriodUnit = N'自定义' then @EndDate else DATEADD(day,-1,@CurrEndDate) end)) + '-01-01'
 	)KPIData
 	on
 		Sales.SalesManager = KPIData.EmpName

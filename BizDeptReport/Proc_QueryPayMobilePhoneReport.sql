@@ -1,4 +1,6 @@
 --[Modified] at 2013-07-22 by 丁俊昊 Description:Add FeeAmtData and CostAmtData
+--[Modified] at 2013-08-29 by 丁俊昊 Description:Finaly Result Need Get All CPMerchantNo from Table_InstuMerInfo
+--[Modified] at 2013-10-09 by 丁俊昊 Description:Add Stat Limit and No GateNo
 if OBJECT_ID(N'Proc_QueryPayMobilePhoneReport',N'P') is not null
 begin
 	drop procedure Proc_QueryPayMobilePhoneReport;
@@ -12,6 +14,7 @@ create procedure Proc_QueryPayMobilePhoneReport
 	@EndDate datetime = '2013-03-12'
 as
 begin
+
 
 --1.
 --目的：检查时间参数是否为空
@@ -29,8 +32,8 @@ declare @CurrEndDate datetime;
 
 if(@PeriodUnit = N'周')  
 begin  
-	set @CurrStartDate = @StartDate;  
-	set @CurrEndDate = DATEADD(WEEK,1,@StartDate);  
+	set @CurrStartDate = @StartDate;
+	set @CurrEndDate = DATEADD(WEEK,1,@StartDate);
 end  
 else if(@PeriodUnit = N'月')  
 begin  
@@ -105,16 +108,18 @@ with InstuNo as
 	from  
 		Table_InstuMerInfo  
 	where  
-		InstuNo = '999920130320153'  
-)  
-select  
-	Table_CpUpopRelation.CpMerNo CPMerchantNo,  
-	Table_CpUpopRelation.UpopMerNo  
-into  
+		InstuNo = '999920130320153'
+		and
+		Stat = '1'
+)
+select
+	coalesce(Table_CpUpopRelation.CpMerNo,InstuNo.CPMerchantNo) CPMerchantNo,
+	Table_CpUpopRelation.UpopMerNo
+into
 	#InstuNoMer
 from
 	Table_CpUpopRelation
-	inner join
+	right join
 	InstuNo
 	on
 		InstuNo.CPMerchantNo = Table_CpUpopRelation.CpMerNo;
@@ -125,14 +130,13 @@ from
 --结果集：#AllData  
 --粒度：一个网关号对应一个商户号对应一条汇总记录  
 --列名：CPMerchantNo、CPMerchantName、UpopMerNo、UPOPMerchantName、OpenTime、GateNo、TransAmt、TransCnt
-select  
-	T.CPMerchantNo,  
-	CP.MerchantName CPMerchantName,  
-	T.UpopMerNo,  
-	UPOP.MerchantName UPOPMerchantName,  
-	CP.OpenTime,  
-	U.GateNo,  
-	SUM(U.PurAmt)/1000000.0 TransAmt,  
+select
+	T.CPMerchantNo,
+	CP.MerchantName CPMerchantName,
+	T.UpopMerNo,
+	UPOP.MerchantName UPOPMerchantName,
+	CP.OpenTime,
+	SUM(U.PurAmt)/1000000.0 TransAmt,
 	SUM(U.PurCnt)/10000.0 TransCnt
 into
 	#AllData
@@ -159,15 +163,13 @@ group by
 	CP.MerchantName,
 	T.UpopMerNo,
 	UPOP.MerchantName,
-	CP.OpenTime,
-	U.GateNo
+	CP.OpenTime
 order by
 	T.UpopMerNo;
 
 
 --4. Prepare #UPOPCostAndFeeData SUMData
 select
-	 GateNo,
 	 MerchantNo,
 	 SUM(CostAmt) CostAmt,
 	 SUM(FeeAmt) FeeAmt
@@ -176,7 +178,6 @@ into
 from 
 	#UPOPCostAndFeeData
 group by
-	GateNo,
 	MerchantNo;
 
 
@@ -189,7 +190,6 @@ select
 	#InstuNoMer.UpopMerNo,
 	coalesce(UPOPMerchantName,UPOP.MerchantName) UPOPMerchantName,
 	coalesce(#AllData.OpenTime,UPOP.OpenDate,CP.OpenTime) OpenTime,
-	#AllData.GateNo,
 	#AllData.TransAmt,
 	#AllData.TransCnt
 from
@@ -213,7 +213,6 @@ from
 		Result.UpopMerNo,
 		Result.UPOPMerchantName,
 		Result.OpenTime,
-		Result.GateNo,
 		Result.TransAmt,
 		Result.TransCnt,
 		#SUMUpopCostAndFee.FeeAmt/100.0 FeeAmt,
@@ -223,9 +222,7 @@ from
 		left join
 		#SUMUpopCostAndFee
 		on
-			Result.UpopMerNo = #SUMUpopCostAndFee.MerchantNo
-			and
-			Result.GateNo = #SUMUpopCostAndFee.GateNo;
+			Result.UpopMerNo = #SUMUpopCostAndFee.MerchantNo;
 
 
 end
