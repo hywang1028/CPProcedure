@@ -1,3 +1,5 @@
+--[Modified] on 2013-10-14 By 丁俊昊 Description:Add TraScreenSum Data
+--对应前台:公司业务成功交易及收入周期报表
 if OBJECT_ID(N'Proc_QueryGateSucceedTransReportToSalesUse', N'P') is not null
 begin
 	drop procedure Proc_QueryGateSucceedTransReportToSalesUse;
@@ -32,6 +34,7 @@ begin
 	raiserror('@MeasureCategory cannot be empty.', 16, 1);
 end
 
+
 --0.1 Prepare StartDate and EndDate
 declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
@@ -46,7 +49,7 @@ begin
 	set @CurrEndDate = DATEADD(week, 1, @StartDate);
 	set @PrevStartDate = DATEADD(week, -1, @CurrStartDate);
 	set @PrevEndDate = @CurrStartDate;
-	set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate);	
+	set @LastYearStartDate = DATEADD(year, -1, @CurrStartDate);
 	set @LastYearEndDate = DATEADD(year, -1, @CurrEndDate);
 end
 else if(@PeriodUnit = N'月')
@@ -96,7 +99,7 @@ begin
 end
 
 
---1. Get this period trade count/amount/FeeAmt
+--1. Get this period trade count/amount/FeeAmt and Add TraScreen Data
 select
 	GateNo,
 	MerchantNo,
@@ -113,52 +116,81 @@ where
 	FeeEndDate < @CurrEndDate
 group by
 	GateNo,
-	MerchantNo;
-
-
+	MerchantNo
+union all
 select
-	BankSettingID,
+	ChannelNo as GateNo,
 	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataC
+	SUM(CalFeeCnt) as SumSucceedCount,
+	SUM(CalFeeAmt) as SumSucceedAmount,
+	SUM(FeeAmt) as CurrFeeAmt
 from
-	Table_OraTransSum
-where
-	CPDate >= @CurrStartDate
-	and
-	CPDate < @CurrEndDate;
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataC ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-
-select
-	BankSettingID as GateNo,
-	MerchantNo,
-	sum(TransCount) SumSucceedCount,
-	sum(TransAmount) SumSucceedAmount,
-	(select SUM(#ORADataC.FeeAmount) from #ORADataC where MerchantNo = Table_OraTransSum.MerchantNo and BankSettingID = Table_OraTransSum.BankSettingID) CurrFeeAmt
-into
-	#CurrOraTrans
-from
-	Table_OraTransSum
+	Table_TraScreenSum
 where
 	CPDate >= @CurrStartDate
 	and
 	CPDate < @CurrEndDate
+	and
+	TransType in ('100004','100001')
 group by
-	BankSettingID,
+	ChannelNo,
 	MerchantNo;
+
+
+--1.2 Add CurrORA_TraScreen Data
+with AllORAData as
+(
+	select
+		BankSettingID,
+		MerchantNo,
+		SUM(TransCount) as SumSucceedCount,
+		SUM(TransAmount) as SumSucceedAmount,
+		SUM(FeeAmount) as CurrFeeAmt
+	from
+		Table_OraTransSum
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate < @CurrEndDate
+	group by
+		BankSettingID,
+		MerchantNo
+	union all
+	select
+		ChannelNo as BankSettingID,
+		MerchantNo,
+		SUM(CalFeeCnt) as SumSucceedCount,
+		SUM(CalFeeAmt) as SumSucceedAmount,
+		SUM(FeeAmt) as CurrFeeAmt
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @CurrStartDate
+		and
+		CPDate < @CurrEndDate
+		and
+		TransType in ('100002','100005')
+	group by
+		ChannelNo,
+		MerchantNo
+)
+	select
+		BankSettingID as GateNo,
+		AllORAData.MerchantNo,
+		SUM(SumSucceedCount) as SumSucceedCount,
+		SUM(SumSucceedAmount) as SumSucceedAmount,
+		SUM(ISNULL(AllORAData.SumSucceedCount * Additional.FeeValue,AllORAData.CurrFeeAmt)) as CurrFeeAmt
+	into
+		#CurrOraTrans
+	from
+		AllORAData
+		left join
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllORAData.MerchantNo = Additional.MerchantNo
+	group by
+		BankSettingID,
+		AllORAData.MerchantNo;
 
 
 select
@@ -180,7 +212,7 @@ group by
 	MerchantNo;
 
 
---2. Get previous period trade count/amount/FeeAmt
+--2. Get previous period trade count/amount/FeeAmt and Add TraSceen Data
 select
 	GateNo,
 	MerchantNo,
@@ -197,53 +229,81 @@ where
 	FeeEndDate < @PrevEndDate
 group by
 	GateNo,
-	MerchantNo;
-
-
+	MerchantNo
+union all
 select
-	BankSettingID,
+	ChannelNo as GateNo,
 	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataP
+	SUM(CalFeeCnt) as SumSucceedCount,
+	SUM(CalFeeAmt) as SumSucceedAmount,
+	SUM(FeeAmt) as PrevFeeAmt
 from
-	Table_OraTransSum
-where
-	CPDate >= @PrevStartDate
-	and
-	CPDate < @PrevStartDate;
-
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataP ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-
-select
-	BankSettingID as GateNo,
-	MerchantNo,
-	sum(TransCount) SumSucceedCount,
-	sum(TransAmount) SumSucceedAmount,
-	(select SUM(#ORADataP.FeeAmount) from #ORADataP where MerchantNo = Table_OraTransSum.MerchantNo and BankSettingID = Table_OraTransSum.BankSettingID) PrevFeeAmt
-into
-	#PrevOraTrans
-from
-	Table_OraTransSum
+	Table_TraScreenSum
 where
 	CPDate >= @PrevStartDate
 	and
 	CPDate < @PrevEndDate
+	and
+	TransType in ('100004','100001')
 group by
-	BankSettingID,
+	ChannelNo,
 	MerchantNo;
+
+
+--2.2 Add PrevORA_TraScreen Data
+with AllORAData as
+(
+	select
+		BankSettingID,
+		MerchantNo,
+		SUM(TransCount) as SumSucceedCount,
+		SUM(TransAmount) as SumSucceedAmount,
+		SUM(FeeAmount) as PrevFeeAmt
+	from
+		Table_OraTransSum
+	where
+		CPDate >= @PrevStartDate
+		and
+		CPDate < @PrevEndDate
+	group by
+		BankSettingID,
+		MerchantNo
+	union all
+	select
+		ChannelNo as BankSettingID,
+		MerchantNo,
+		SUM(CalFeeCnt) as SumSucceedCount,
+		SUM(CalFeeAmt) as SumSucceedAmount,
+		SUM(FeeAmt) as PrevFeeAmt
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @PrevStartDate
+		and
+		CPDate < @PrevEndDate
+		and
+		TransType in ('100002','100005')
+	group by
+		ChannelNo,
+		MerchantNo
+)
+	select
+		BankSettingID as GateNo,
+		AllORAData.MerchantNo,
+		SUM(SumSucceedCount) as SumSucceedCount,
+		SUM(SumSucceedAmount) as SumSucceedAmount,
+		SUM(ISNULL(AllORAData.SumSucceedCount * Additional.FeeValue,AllORAData.PrevFeeAmt)) as PrevFeeAmt
+	into
+		#PrevOraTrans
+	from
+		AllORAData
+		left join
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllORAData.MerchantNo = Additional.MerchantNo
+	group by
+		BankSettingID,
+		AllORAData.MerchantNo;
 
 
 select
@@ -265,7 +325,7 @@ group by
 	MerchantNo;
 
 
---3. Get last year same period trade count/amount
+--3. Get last year same period trade count/amount and Add TraScreen Data
 select
 	GateNo,
 	MerchantNo,
@@ -282,53 +342,81 @@ where
 	FeeEndDate < @LastYearEndDate
 group by
 	GateNo,
-	MerchantNo;
-
-
+	MerchantNo
+union all
 select
-	BankSettingID,
+	ChannelNo as GateNo,
 	MerchantNo,
-	TransCount,
-	FeeAmount
-into
-	#ORADataL
+	SUM(CalFeeCnt) as SumSucceedCount,
+	SUM(CalFeeAmt) as SumSucceedAmount,
+	SUM(FeeAmt) as LastYearFeeAmt
 from
-	Table_OraTransSum
-where
-	CPDate >= @LastYearStartDate
-	and
-	CPDate < @LastYearEndDate;
-
-
-update
-	ORAFee
-set
-	ORAFee.FeeAmount = ORAFee.TransCount * AdditionalRule.FeeValue
-from
-	#ORADataL ORAFee
-	inner join
-	Table_OraAdditionalFeeRule AdditionalRule
-	on
-		ORAFee.MerchantNo = AdditionalRule.MerchantNo;
-
-
-select
-	BankSettingID as GateNo,
-	MerchantNo,
-	sum(TransCount) SumSucceedCount,
-	sum(TransAmount) SumSucceedAmount,
-	(select SUM(#ORADataL.FeeAmount) from #ORADataL where MerchantNo = Table_OraTransSum.MerchantNo and BankSettingID = Table_OraTransSum.BankSettingID) LastYearFeeAmt
-into
-	#LastYearOraTrans
-from
-	Table_OraTransSum
+	Table_TraScreenSum
 where
 	CPDate >= @LastYearStartDate
 	and
 	CPDate < @LastYearEndDate
+	and
+	TransType in ('100004','100001')
 group by
-	BankSettingID,
+	ChannelNo,
 	MerchantNo;
+
+
+--3.2 Add LastYearOld_TraScreen
+with AllORAData as
+(
+	select
+		BankSettingID,
+		MerchantNo,
+		SUM(TransCount) as SumSucceedCount,
+		SUM(TransAmount) as SumSucceedAmount,
+		SUM(FeeAmount) as LastYearFeeAmt
+	from
+		Table_OraTransSum
+	where
+		CPDate >= @LastYearStartDate
+		and
+		CPDate < @LastYearEndDate
+	group by
+		BankSettingID,
+		MerchantNo
+	union all
+	select
+		ChannelNo as BankSettingID,
+		MerchantNo,
+		SUM(CalFeeCnt) as SumSucceedCount,
+		SUM(CalFeeAmt) as SumSucceedAmount,
+		SUM(FeeAmt) as LastYearFeeAmt
+	from
+		Table_TraScreenSum
+	where
+		CPDate >= @LastYearStartDate
+		and
+		CPDate < @LastYearEndDate
+		and
+		TransType in ('100002','100005')
+	group by
+		ChannelNo,
+		MerchantNo
+)
+	select
+		BankSettingID as GateNo,
+		AllORAData.MerchantNo,
+		SUM(SumSucceedCount) as SumSucceedCount,
+		SUM(SumSucceedAmount) as SumSucceedAmount,
+		SUM(ISNULL(AllORAData.SumSucceedCount * Additional.FeeValue,AllORAData.LastYearFeeAmt)) as LastYearFeeAmt
+	into
+		#LastYearOraTrans
+	from
+		AllORAData
+		left join
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllORAData.MerchantNo = Additional.MerchantNo
+	group by
+		BankSettingID,
+		AllORAData.MerchantNo;
 
 
 select
@@ -508,10 +596,10 @@ set
 	SumValue.PrevSumValue = ISNULL(CuryRate.AVGCuryRate, 1.0)*SumValue.PrevSumValue,
 	SumValue.PrevFeeAmt = ISNULL(CuryRate.AVGCuryRate, 1.0)*SumValue.PrevFeeAmt
 from  
-	#SumValue SumValue  
-	inner join  
-	Table_MerInfoExt MerInfo  
-	on  
+	#SumValue SumValue
+	inner join
+	Table_MerInfoExt MerInfo
+	on
 		SumValue.MerchantNo = MerInfo.MerchantNo  
 		inner join  
 		CuryRate  
@@ -552,9 +640,9 @@ from
 
 --Result AmtData
 	select
-		Mer.MerchantName,
+		ISNULL(Mer.MerchantName,TraMer.MerchantName) as MerchantName,
 		SumValue.MerchantNo,
-		ISNULL(case when Gate.GateCategory1 = '#N/A' then NULL else Gate.GateCategory1 End,N'其他') GateCategory,
+		ISNULL(case when Gate.GateCategory1 = '#N/A' then NULL when SumValue.GateNo in (select ChannelNo from Table_TraScreenSum where TransType in ('100004','100001')) then '代扣' else Gate.GateCategory1 End,N'其他') GateCategory,
 		SumValue.GateNo,
 		SumValue.CurrSumValue/1000000 CurrSumValue,
 		SumValue.PrevSumValue/1000000 PrevSumValue,
@@ -572,14 +660,18 @@ from
 		Table_MerInfo Mer
 		on
 			SumValue.MerchantNo = Mer.MerchantNo
+		left join
+		Table_TraMerchantInfo TraMer
+		on
+			SumValue.MerchantNo = TraMer.MerchantNo
 	where
-		TypeName = N'Pay'
+		TypeName = N'Pay' 
 	union all
 	select
-		Mer.MerchantName,
+		ISNULL(Mer.MerchantName,TraMer.MerchantName) as MerchantName,
 		SumValue.MerchantNo,
 		N'代付' as GateCategory,
-		Gate.BankName,
+		ISNULL(Gate.BankName,Channel.ChannelName) as BankName,
 		ISNULL(SUM(SumValue.CurrSumValue),0)/1000000 CurrSumValue,
 		ISNULL(SUM(SumValue.PrevSumValue),0)/1000000 PrevSumValue,
 		ISNULL(SUM(SumValue.LastYearSumValue),0)/1000000 LastYearSumValue,
@@ -596,12 +688,20 @@ from
 		Table_OraMerchants Mer
 		on
 			SumValue.MerchantNo = Mer.MerchantNo
+		left join
+		Table_TraChannelConfig Channel
+		on
+			SumValue.GateNo = Channel.ChannelNo
+		left join
+		Table_TraMerchantInfo TraMer
+		on
+			SumValue.MerchantNo = TraMer.MerchantNo
 	where
 		TypeName = N'Ora'
 	group by
-		Mer.MerchantName,
-		SumValue.MerchantNo,
-		Gate.BankName
+		ISNULL(Mer.MerchantName,TraMer.MerchantName),
+		ISNULL(Gate.BankName,Channel.ChannelName),
+		SumValue.MerchantNo
 	union all
 	select
 		Upop.MerchantName,
@@ -717,7 +817,7 @@ begin
 
 --Result CntData
 	select
-		Mer.MerchantName,
+		ISNULL(Mer.MerchantName,TraMer.MerchantName) as MerchantName,
 		SumCount.MerchantNo,
 		ISNULL(case when Gate.GateCategory1 = '#N/A' then NULL else Gate.GateCategory1 End,N'其他') GateCategory,
 		SumCount.GateNo,
@@ -734,14 +834,18 @@ begin
 		Table_MerInfo Mer
 		on
 			SumCount.MerchantNo = Mer.MerchantNo
+		left join
+		Table_TraMerchantInfo TraMer
+		on
+			SumCount.MerchantNo = TraMer.MerchantNo
 	where
 		TypeName = N'Pay'
 	union all
 	select
-		Mer.MerchantName,
+		ISNULL(Mer.MerchantName,TraMer.MerchantName) as MerchantName,
 		SumCount.MerchantNo,
 		N'代付' as GateCategory,
-		Gate.BankName,
+		ISNULL(Gate.BankName,Channel.ChannelName) as BankName,
 		ISNULL(SUM(SumCount.CurrSumValue),0) CurrSumValue,
 		ISNULL(SUM(SumCount.PrevSumValue),0) PrevSumValue,
 		ISNULL(SUM(SumCount.LastYearSumValue),0) LastYearSumValue
@@ -755,12 +859,20 @@ begin
 		Table_OraMerchants Mer
 		on
 			SumCount.MerchantNo = Mer.MerchantNo
+		left join
+		Table_TraChannelConfig Channel
+		on
+			SumCount.GateNo = Channel.ChannelNo
+		left join
+		Table_TraMerchantInfo TraMer
+		on
+			SumCount.MerchantNo = TraMer.MerchantNo
 	where
 		TypeName = N'Ora'
 	group by
-		Mer.MerchantName,
-		SumCount.MerchantNo,
-		Gate.BankName
+		ISNULL(Mer.MerchantName,TraMer.MerchantName),
+		ISNULL(Gate.BankName,Channel.ChannelName),
+		SumCount.MerchantNo
 	union all
 	select
 		Upop.MerchantName,
