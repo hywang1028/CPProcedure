@@ -402,34 +402,50 @@ with UPOP as
 
 
 -- 根据用户要求进行排序
-select
-	MerchantName,
-	case when
-		substring(MerchantNo,1,1) = '6'
-	then
-		1
-	when
-		substring(MerchantNo,1,3) = '808'
-	then
-		2
-	when
-		substring(MerchantNo,1,3) = '802'
-	then
-		3
-	when
-		MerchantNo = ''
-	then
-		5
-	else
-		4
-	end ID,
-	MerchantNo,
-	TransCount,
-	TransAmount
-from
-	#Result
-order by
-	ID;
+with Finaly as
+(
+	select  
+		MerchantName,  
+	case when  
+		substring(MerchantNo,1,1) = '6'  
+	then  
+		1  
+	when  
+		substring(MerchantNo,1,3) = '808'  
+	then  
+		2  
+	when  
+		substring(MerchantNo,1,3) = '802'  
+	then  
+		3  
+	when  
+		MerchantNo = ''  
+	then  
+		5  
+	else  
+		4  
+	end ID,  
+		MerchantNo,  
+		TransCount,  
+		TransAmount  
+	from  
+		#Result  
+)
+	select
+		MerchantName,
+		ID,
+		MerchantNo,
+		SUM(TransCount) TransCount,
+		SUM(TransAmount) TransAmount
+	from 
+		Finaly
+	group by 
+		MerchantName,
+		ID,
+		MerchantNo
+	order by  
+		ID;
+  
 
 
 --9. drop temp table
