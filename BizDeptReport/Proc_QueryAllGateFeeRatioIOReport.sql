@@ -3,6 +3,7 @@
 --Output:全网关版,平均银行成本率,银行成本占比,平均收入率,收入占比
 
 --Modified By Richard Wu 2013-07-23 Use Proc_GetPaymentCost replace Proc_CalPaymentCost
+--Modified By Richard Wu 2013-10-28 Use Proc_CalPaymentCost replace Proc_GetPaymentCost
 
 if OBJECT_ID(N'Proc_QueryAllGateFeeRatioIOReport', N'P') is not null
 begin
@@ -68,7 +69,7 @@ create table #CurrPayCost
 insert into 
 	#CurrPayCost
 exec 
-	Proc_GetPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 
 --Current UPOP Liq Trans
 create table #UPOPCostAndFeeData
