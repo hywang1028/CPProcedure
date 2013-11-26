@@ -3,8 +3,6 @@
 --Output:考核口径版,平均银行成本率,银行成本占比,平均收入率,收入占比
 
 --Modified By Richard Wu 2013-07-23 Use Proc_GetPaymentCost replace Proc_CalPaymentCost
---Modified By Richard Wu 2013-10-28 Use Proc_CalPaymentCost replace Proc_GetPaymentCost
-
 
 if OBJECT_ID(N'Proc_QueryPartGateFeeRatioIOReport', N'P') is not null
 begin
@@ -70,7 +68,7 @@ create table #CurrPayCost
 insert into 
 	#CurrPayCost
 exec 
-	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_GetPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 
 --Current Ora Trans
 create table #CurrOraCost
@@ -170,9 +168,9 @@ CurrPayTrans as
 		#CurrPayCost
 	where
 		GateNo not in ('0016','0018','0019','0024','0044','0045','0058','0086','1019','2008',
-			'3124','5003','5005','5009','5013','5015','5021','5022','5023','5026','5032','5131','5132',
-			'5424','5602','5603','5604','5606','5901','5902','7007','7009','7012','7013','7015','7018',
-			'7022','7024','7025','7033','7107','7207','7507','7517','8601','8604','8607','8610','8614','9021')
+			'3124','5003','5005','5009','5011','5013','5015','5021','5022','5023','5026','5031','5032','5131','5132',
+			'5424','5602','5603','5604','5606','5608','5609','5901','5902','7007','7009','7012','7013','7015','7018',
+			'7022','7023','7024','7025','7027','7029','7033','7107','7207','7507','7517','8601','8604','8607','8610','8614','9021')
 		and
 		GateNo not in (select GateNo from Table_GateCategory where GateCategory1 in ('UPOP','EPOS'))
 		and
