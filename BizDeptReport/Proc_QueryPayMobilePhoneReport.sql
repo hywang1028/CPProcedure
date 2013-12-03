@@ -1,34 +1,32 @@
 --[Modified] at 2013-07-22 by 丁俊昊 Description:Add FeeAmtData and CostAmtData
 --[Modified] at 2013-08-29 by 丁俊昊 Description:Finaly Result Need Get All CPMerchantNo from Table_InstuMerInfo
 --[Modified] at 2013-10-09 by 丁俊昊 Description:Add Stat Limit and No GateNo
+--[Modified] at 2013-11-27 by 丁俊昊 Description:Add New GateNo(7607) Data
 if OBJECT_ID(N'Proc_QueryPayMobilePhoneReport',N'P') is not null
 begin
 	drop procedure Proc_QueryPayMobilePhoneReport;
 end
 go
 
-
 create procedure Proc_QueryPayMobilePhoneReport
-	@StartDate datetime = '2013-01-11',
-	@PeriodUnit Nchar(3) = N'自定义',
-	@EndDate datetime = '2013-03-12'
+	@StartDate date,
+	@PeriodUnit nchar(3),
+	@EndDate date
 as
 begin
-
 
 --1.
 --目的：检查时间参数是否为空
 --结果集：报错信息
 --粒度：无
 --列名：无
-if(@StartDate is null)
+if(@StartDate is null or isnull(@PeriodUnit, N'')=N'')
 begin
-	raiserror(N'Input params can`t be empty in Proc_QueryPayMobilePhoneReport',16,1);  
+	raiserror(N'@StartDate and @PeriodUnit cannot be empty.',16,1);  
 end
 
-declare @CurrStartDate datetime;
-declare @CurrEndDate datetime;
-
+declare @CurrStartDate date;
+declare @CurrEndDate date;
 
 if(@PeriodUnit = N'周')  
 begin  
@@ -56,7 +54,17 @@ begin
 	set @CurrEndDate = DATEADD(YEAR,1,@StartDate);  
 end  
 else if(@PeriodUnit = N'自定义')  
-begin  
+begin
+	if(@EndDate is null)
+	begin
+		raiserror(N'@EndDate cannot be empty.',16,1);  
+	end
+	
+	if(@EndDate < @StartDate)
+	begin
+		raiserror(N'@EndDate cannot earlier than @StartDate.', 16, 1);
+	end
+	
 	set @CurrStartDate = @StartDate;  
 	set @CurrEndDate = DATEADD(day,1,@EndDate);  
 end;  
@@ -68,33 +76,31 @@ end;
 --粒度：网关号、商户号  
 --列名：GateNo、MerchantNo、TransDate、CdFlag、TransAmt、TransCnt、FeeAmt、CostAmt
 create table #UPOPCostAndFeeData
-	(
-		GateNo char(6),
-		MerchantNo varchar(25),
-		TransDate datetime,
-		CdFlag	char(5),
-		TransAmt decimal(16,2),
-		TransCnt bigint,
-		FeeAmt decimal(16,2),
-		CostAmt decimal(18,4)
-	)
-begin
-	insert into #UPOPCostAndFeeData
-	(	
-		GateNo,
-		MerchantNo,
-		TransDate,
-		CdFlag,
-		TransAmt,
-		TransCnt,
-		FeeAmt,
-		CostAmt
-	)
-	exec Proc_CalUPOPCost
-		@CurrStartDate,
-		@CurrEndDate
-end;
+(
+	GateNo char(4),
+	MerchantNo varchar(25),
+	TransDate date,
+	CdFlag	char(2),
+	TransAmt decimal(16,2),
+	TransCnt bigint,
+	FeeAmt decimal(16,2),
+	CostAmt decimal(16,2)
+);
 
+insert into #UPOPCostAndFeeData
+(	
+	GateNo,
+	MerchantNo,
+	TransDate,
+	CdFlag,
+	TransAmt,
+	TransCnt,
+	FeeAmt,
+	CostAmt
+)
+exec Proc_CalUPOPCost
+	@CurrStartDate,
+	@CurrEndDate;
 
 --2.  
 --目的：999920130320153机构号下所有CP商户号对应用户配置表中的UPOP商户号。  
@@ -104,7 +110,7 @@ end;
 with InstuNo as  
 (  
 	select  
-		MerchantNo CPMerchantNo  
+		MerchantNo  
 	from  
 		Table_InstuMerInfo  
 	where  
@@ -113,116 +119,83 @@ with InstuNo as
 		Stat = '1'
 )
 select
-	coalesce(Table_CpUpopRelation.CpMerNo,InstuNo.CPMerchantNo) CPMerchantNo,
+	InstuNo.MerchantNo,
 	Table_CpUpopRelation.UpopMerNo
 into
 	#InstuNoMer
 from
-	Table_CpUpopRelation
-	right join
 	InstuNo
+	left join
+	Table_CpUpopRelation
 	on
-		InstuNo.CPMerchantNo = Table_CpUpopRelation.CpMerNo;
+		InstuNo.MerchantNo = Table_CpUpopRelation.CpMerNo;
 
-
---3.
---目的：得出结果集  
---结果集：#AllData  
---粒度：一个网关号对应一个商户号对应一条汇总记录  
---列名：CPMerchantNo、CPMerchantName、UpopMerNo、UPOPMerchantName、OpenTime、GateNo、TransAmt、TransCnt
+--
 select
-	T.CPMerchantNo,
-	CP.MerchantName CPMerchantName,
-	T.UpopMerNo,
-	UPOP.MerchantName UPOPMerchantName,
-	CP.OpenTime,
-	SUM(U.PurAmt)/1000000.0 TransAmt,
-	SUM(U.PurCnt)/10000.0 TransCnt
+	MerchantNo,
+	sum(SucceedTransAmount) as TransAmt,
+	sum(SucceedTransCount) as TransCnt
 into
-	#AllData
+	#Gate7607
 from
-	#InstuNoMer T
-	left join
-	Table_UpopliqFeeLiqResult U
-	on
-		T.UpopMerNo = U.MerchantNo
-	left join
-	Table_MerInfo CP
-	on
-		T.CPMerchantNo = CP.MerchantNo
-	left join
-	Table_UpopliqMerInfo UPOP
-	on
-		T.UpopMerNo = UPOP.MerchantNo
+	FactDailyTrans
 where
-	TransDate >= @CurrStartDate
+	GateNo = '7607'
 	and
-	TransDate < @CurrEndDate
-group by
-	T.CPMerchantNo,
-	CP.MerchantName,
-	T.UpopMerNo,
-	UPOP.MerchantName,
-	CP.OpenTime
-order by
-	T.UpopMerNo;
-
-
---4. Prepare #UPOPCostAndFeeData SUMData
-select
-	 MerchantNo,
-	 SUM(CostAmt) CostAmt,
-	 SUM(FeeAmt) FeeAmt
-into
-	#SUMUpopCostAndFee
-from 
-	#UPOPCostAndFeeData
+	DailyTransDate >= @CurrStartDate
+	and
+	DailyTransDate < @CurrEndDate
 group by
 	MerchantNo;
 
-
---4. Result
-with Result as
+with upop as
 (
-select
-	#InstuNoMer.CPMerchantNo,
-	coalesce(CPMerchantName,CP.MerchantName) CPMerchantName,
-	#InstuNoMer.UpopMerNo,
-	coalesce(UPOPMerchantName,UPOP.MerchantName) UPOPMerchantName,
-	coalesce(#AllData.OpenTime,UPOP.OpenDate,CP.OpenTime) OpenTime,
-	#AllData.TransAmt,
-	#AllData.TransCnt
-from
-	#InstuNoMer
-	left join
-	#AllData
-	on
-		#InstuNoMer.CPMerchantNo =  #AllData.CPMerchantNo
-		left join
-		Table_UpopliqMerInfo UPOP
-	on
-		#InstuNoMer.UpopMerNo = UPOP.MerchantNo
-	left join
-	Table_MerInfo CP
-	on
-		#InstuNoMer.CPMerchantNo = CP.MerchantNo
-)
 	select
-		Result.CPMerchantNo,
-		Result.CPMerchantName,
-		Result.UpopMerNo,
-		Result.UPOPMerchantName,
-		Result.OpenTime,
-		Result.TransAmt,
-		Result.TransCnt,
-		#SUMUpopCostAndFee.FeeAmt/100.0 FeeAmt,
-		#SUMUpopCostAndFee.CostAmt/100.0 CostAmt
+		MerchantNo,
+		SUM(TransAmt) as TransAmt,
+		SUM(TransCnt) as TransCnt,
+		SUM(FeeAmt) as FeeAmt,
+		SUM(CostAmt) as CostAmt
 	from
-		Result
-		left join
-		#SUMUpopCostAndFee
-		on
-			Result.UpopMerNo = #SUMUpopCostAndFee.MerchantNo;
+		#UPOPCostAndFeeData
+	group by
+		MerchantNo
+)
+select
+	instu.MerchantNo as CPMerchantNo,
+	merinfo.MerchantName as CPMerchantName,
+	instu.UpopMerNo as UpopMerNo,
+	(select MerchantName from Table_UpopliqMerInfo where MerchantNo = instu.UpopMerNo) as UpopMerchantName,
+	merinfo.OpenTime,
+	ISNULL(upop.TransAmt,0)/1000000.0 as UpopTransAmt,
+	ISNULL(upop.TransCnt,0)/10000.0 as UpopTransCnt,
+	ISNULL(upop.FeeAmt,0)/100.0 as UpopFeeAmt,
+	ISNULL(upop.CostAmt,0)/100.0 as UpopCostAmt,
+	ISNULL(g.TransAmt,0)/1000000.0 as TransAmt,
+	ISNULL(g.TransCnt,0)/10000.0 as TransCnt,
+	(ISNULL(upop.TransAmt, 0) + ISNULL(g.TransAmt, 0))/1000000.0 as AllTransAmt,
+	(ISNULL(upop.TransCnt, 0) + ISNULL(g.TransCnt, 0))/10000.0 as AllTransCnt
+from
+	#InstuNoMer instu
+	left join
+	Table_MerInfo merinfo
+	on
+		instu.MerchantNo = merinfo.MerchantNo
+	left join
+	upop
+	on
+		instu.UpopMerNo = upop.MerchantNo
+	left join
+	#Gate7607 g
+	on
+		instu.MerchantNo = g.MerchantNo
+
+
+--Drop table
+drop table #UPOPCostAndFeeData;
+drop table #InstuNoMer;
+drop table #Gate7607;
+
 
 
 end

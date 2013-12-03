@@ -3,6 +3,8 @@
 --Output:考核口径版,平均银行成本率,银行成本占比,平均收入率,收入占比
 
 --Modified By Richard Wu 2013-07-23 Use Proc_GetPaymentCost replace Proc_CalPaymentCost
+--Modified By Richard Wu 2013-10-28 Use Proc_CalPaymentCost replace Proc_GetPaymentCost
+
 
 if OBJECT_ID(N'Proc_QueryPartGateFeeRatioIOReport', N'P') is not null
 begin
@@ -68,7 +70,7 @@ create table #CurrPayCost
 insert into 
 	#CurrPayCost
 exec 
-	Proc_GetPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 
 --Current Ora Trans
 create table #CurrOraCost

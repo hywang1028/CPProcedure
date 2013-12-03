@@ -3,7 +3,7 @@
 --[Modified] on 2013-05-10 By 丁俊昊 Description:Add FeeAmt Data
 --[Modified] on 2013-09-06 By 丁俊昊 Description:Modify KPI Display,Modify PeriodStartDate Limit from Table_EmployeeKPI
 --[Modified] on 2013-09-29 By 丁俊昊 Description:Add TraScreenSum Data and Modified PeriodStartDate from Table_EmployeeKPI
---对应前台商户交易量统计报表
+--对应前台:商户交易量统计报表
 
 if OBJECT_ID(N'Proc_QuerySalesMerTransReport', N'P') is not null
 begin
@@ -679,7 +679,8 @@ select * from #ThisYearWUData;
 update
 	CD
 set
-	CD.CurrSucceedAmount = CD.CurrSucceedAmount * CR.CurrencyRate
+	CD.CurrSucceedAmount = CD.CurrSucceedAmount * CR.CurrencyRate,
+	CD.CurrFeeAmt = CD.CurrFeeAmt * CR.CurrencyRate
 from
 	#CurrData CD
 	inner join
@@ -690,7 +691,8 @@ from
 update
 	PD
 set
-	PD.PrevSucceedAmount = PD.PrevSucceedAmount * CR.CurrencyRate
+	PD.PrevSucceedAmount = PD.PrevSucceedAmount * CR.CurrencyRate,
+	PD.PrevFeeAmt = PD.PrevFeeAmt * CR.CurrencyRate
 from
 	#PrevData PD
 	inner join
@@ -701,18 +703,20 @@ from
 update
 	LYD
 set
-	LYD.LastYearSucceedAmount = LYD.LastYearSucceedAmount * CR.CurrencyRate
+	LYD.LastYearSucceedAmount = LYD.LastYearSucceedAmount * CR.CurrencyRate,
+	LYD.LastYearFeeAmt = LYD.LastYearFeeAmt * CR.CurrencyRate
 from
 	#LastYearData LYD
 	inner join
 	Table_SalesCurrencyRate CR
 	on
 		LYD.MerchantNo = CR.MerchantNo;
-	
+
 update
 	TYD
 set
-	TYD.ThisYearSucceedAmount = TYD.ThisYearSucceedAmount * CR.CurrencyRate
+	TYD.ThisYearSucceedAmount = TYD.ThisYearSucceedAmount * CR.CurrencyRate,
+	TYD.ThisYearFeeAmt = TYD.ThisYearFeeAmt * CR.CurrencyRate
 from
 	#ThisYearData TYD
 	inner join
@@ -783,7 +787,9 @@ from
 	 from
 		Table_EmployeeKPI 
 	 where  
-		PeriodStartDate = CONVERT(char(4), YEAR(@EndDate)) + '-01-01'
+		CONVERT(char(4),PeriodStartDate) = CONVERT(char(4), YEAR(@EndDate))
+		and
+		DeptName = N'销售部'
 	)KPI
 	on
 		Sales.SalesManager = KPI.EmpName
