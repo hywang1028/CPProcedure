@@ -1,7 +1,7 @@
 --[Modified] on 2012-06-08 By 王红燕 Description:Add West Union Trans Data
 --[Modified] on 2013-03-05 By 王红燕 Description:Modify Channel Info 
 --[Modified] on 2013-05-06 By 丁俊昊 Description:Add FeeAmt Data and MerchantNo
---[Modified] on 2013-09-26 By 丁俊昊 Description:Add TraScreenSum Data
+--[Modified] on 2013-10-23 By 丁俊昊 Description:Add TraScreenSum Data
 --对应前台:客户经理商户交易量统计表
 
 if OBJECT_ID(N'Proc_QuerySalesBUManagerTransReport', N'P') is not null
@@ -298,19 +298,19 @@ with AllFeeCalcData as
 
 
 --4.1 Get #PrevORAData
-with AllFeeCalcData as
+with AllORA as
 (
 	select
 		MerchantNo,
-		SUM(PurCnt) as PrevSucceedCount,
-		SUM(PurAmt) as PrevSucceedAmount,
-		SUM(FeeAmt) as PrevFeeAmt
+		SUM(TransCount) as PrevSucceedCount,
+		SUM(TransAmount) as PrevSucceedAmount,
+		SUM(FeeAmount) as PrevFeeAmt
 	from
-		Table_FeeCalcResult
+		Table_OraTransSum
 	where
-		FeeEndDate >= @PrevStartDate
+		CPDate >= @PrevStartDate
 		and
-		FeeEndDate < @PrevEndDate
+		CPDate < @PrevEndDate
 	group by
 		MerchantNo
 	union all
@@ -326,21 +326,26 @@ with AllFeeCalcData as
 		and
 		CPDate <  @PrevEndDate
 		and
-		TransType in ('100004','100001')
+		TransType in ('100005','100002')
 	group by
 		MerchantNo
 )
 	select
-		MerchantNo,
+		AllORA.MerchantNo,
 		SUM(PrevSucceedCount) as PrevSucceedCount,
 		SUM(PrevSucceedAmount) as PrevSucceedAmount,
-		SUM(PrevFeeAmt) as PrevFeeAmt
+		SUM(ISNULL(AllOra.PrevSucceedCount * Additional.FeeValue, AllOra.PrevFeeAmt)) as PrevFeeAmt
 	into
 		#PrevORAData
 	from
-		AllFeeCalcData
+		AllORA
+		left join
+		Table_OraAdditionalFeeRule Additional
+		on
+			AllOra.MerchantNo = Additional.MerchantNo
 	group by
-		MerchantNo;
+		AllOra.MerchantNo;
+
 
 
 --4.2 Get #PrevWUData
@@ -403,7 +408,7 @@ from
 		PervUPOPData.CPMerchantNo = coalesce(PrevCMCData.MerchantNo, PrevORAData.MerchantNo)
 union all
 select * from #PrevWUData;
-		
+
 
 --5. Get #LastYearCMCData
 with AllFeeCalcData as
@@ -725,7 +730,8 @@ select * from #ThisYearWUData;
 update
 	CD
 set
-	CD.CurrSucceedAmount = CD.CurrSucceedAmount * CR.CurrencyRate
+	CD.CurrSucceedAmount = CD.CurrSucceedAmount * CR.CurrencyRate,
+	CD.CurrFeeAmt = CD.CurrFeeAmt * CR.CurrencyRate
 from
 	#CurrData CD
 	inner join
@@ -736,7 +742,8 @@ from
 update
 	PD
 set
-	PD.PrevSucceedAmount = PD.PrevSucceedAmount * CR.CurrencyRate
+	PD.PrevSucceedAmount = PD.PrevSucceedAmount * CR.CurrencyRate,
+	PD.PrevFeeAmt = PD.PrevFeeAmt * CR.CurrencyRate
 from
 	#PrevData PD
 	inner join
@@ -747,7 +754,8 @@ from
 update
 	LYD
 set
-	LYD.LastYearSucceedAmount = LYD.LastYearSucceedAmount * CR.CurrencyRate
+	LYD.LastYearSucceedAmount = LYD.LastYearSucceedAmount * CR.CurrencyRate,
+	LYD.LastYearFeeAmt = LYD.LastYearFeeAmt * CR.CurrencyRate
 from
 	#LastYearData LYD
 	inner join
@@ -758,7 +766,8 @@ from
 update
 	TYD
 set
-	TYD.ThisYearSucceedAmount = TYD.ThisYearSucceedAmount * CR.CurrencyRate
+	TYD.ThisYearSucceedAmount = TYD.ThisYearSucceedAmount * CR.CurrencyRate,
+	TYD.ThisYearFeeAmt = TYD.ThisYearFeeAmt * CR.CurrencyRate
 from
 	#ThisYearData TYD
 	inner join
@@ -826,9 +835,7 @@ from
 	 from
 		Table_EmployeeKPI
 	 where
-		PeriodStartDate >= @ThisYearRunningStartDate
-		and 
-		PeriodStartDate <  @ThisYearRunningEndDate
+		convert(char(4),PeriodStartDate) = CONVERT(char(4), YEAR(case when @PeriodUnit = N'自定义' then @EndDate else DATEADD(day,-1,@CurrEndDate) end))
 		and
 		DeptName = N'销售部'
 	)BUData
@@ -841,6 +848,7 @@ group by
 	Sales.BranchOffice,
 	Sales.MerchantName,
 	Sales.MerchantNo;
+
 
 
 --9. Clear temp table

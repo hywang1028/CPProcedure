@@ -840,40 +840,46 @@ select * from #ThisYearWUData;
 update
 	CD
 set
-	CD.CurrSucceedAmount = CD.CurrSucceedAmount * CR.CurrencyRate
+	CD.CurrSucceedAmount = CD.CurrSucceedAmount * CR.CurrencyRate,
+	CD.CurrFeeAmt = CD.CurrFeeAmt * CR.CurrencyRate
 from
 	#CurrLimitData CD
 	inner join
 	Table_SalesCurrencyRate CR
 	on
 		CD.MerchantNo = CR.MerchantNo;
-		
+
+
+--前台不显示此列数据		
 update
 	PD
 set
-	PD.PrevSucceedAmount = PD.PrevSucceedAmount * CR.CurrencyRate
+	PD.PrevSucceedAmount = PD.PrevSucceedAmount * CR.CurrencyRate,
+	PD.PrevFeeAmt = PD.PrevFeeAmt * CR.CurrencyRate
 from
 	#PrevData PD
 	inner join
 	Table_SalesCurrencyRate CR
 	on
 		PD.MerchantNo = CR.MerchantNo;
-		
+
 update
 	LYD
 set
-	LYD.LastYearSucceedAmount = LYD.LastYearSucceedAmount * CR.CurrencyRate
+	LYD.LastYearSucceedAmount = LYD.LastYearSucceedAmount * CR.CurrencyRate,
+	LYD.LastYearFeeAmt = LYD.LastYearFeeAmt * CR.CurrencyRate
 from
 	#LastYearDataLimitData LYD
 	inner join
 	Table_SalesCurrencyRate CR
 	on
 		LYD.MerchantNo = CR.MerchantNo;
-	
+
 update
 	TYD
 set
-	TYD.ThisYearSucceedAmount = TYD.ThisYearSucceedAmount * CR.CurrencyRate
+	TYD.ThisYearSucceedAmount = TYD.ThisYearSucceedAmount * CR.CurrencyRate,
+	TYD.ThisYearFeeAmt = TYD.ThisYearFeeAmt * CR.CurrencyRate
 from
 	#ThisYearData TYD
 	inner join
@@ -1015,8 +1021,10 @@ from
 		*
 	 from
 		Table_EmployeeKPI 
-	 where  
-		PeriodStartDate = CONVERT(char(4), YEAR(case when @PeriodUnit = N'自定义' then @EndDate else DATEADD(day,-1,@CurrEndDate) end)) + '-01-01'
+	 where
+		convert(char(4),PeriodStartDate) = CONVERT(char(4), YEAR(case when @PeriodUnit = N'自定义' then @EndDate else DATEADD(day,-1,@CurrEndDate) end))
+		and
+		DeptName = N'销售部'
 	)KPIData
 	on
 		Sales.SalesManager = KPIData.EmpName
