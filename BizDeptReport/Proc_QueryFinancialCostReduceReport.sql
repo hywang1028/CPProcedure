@@ -1,6 +1,7 @@
 --[Created] At 20120530 By 王红燕:金融考核报表之银行成本降低额明细表(境外数据已转为人民币数据)
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 --[Modified] At 20130419 By 王红燕：Modify Reference Cost to Standard Cost
+--[Modified] At 20131231 By 王红燕：Add New Tra Screen Trans and Cost
 if OBJECT_ID(N'Proc_QueryFinancialCostReduceReport', N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialCostReduceReport;
@@ -24,8 +25,6 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
---declare @HisRefDate datetime;
---set @HisRefDate = DATEADD(DAY, -1, '2012-01-01');
 
 --3. Prepare Trans Data
 create table #ActualPayCost
@@ -58,7 +57,40 @@ insert into
 exec 
 	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
 	
-With ActualPayCost as
+create table #ActualTraCost
+(	
+	MerchantNo char(15),
+	ChannelNo char(6),	
+	TransType varchar(20),	
+	CPDate date,
+	TotalCnt int,	
+	TotalAmt decimal(15,2),	
+	SucceedCnt int,	
+	SucceedAmt decimal(15,2),	
+	CalFeeCnt int,	
+	CalFeeAmt decimal(15,2),	
+	CalCostCnt int,	
+	CalCostAmt decimal(15,2),	
+	FeeAmt decimal(15,2),
+	CostAmt decimal(15,2)
+)
+insert into #ActualTraCost
+exec Proc_CalTraCost @CurrStartDate,@CurrEndDate;
+	
+With ActualNewOraCost as
+(
+	select
+		ChannelNo,
+		N'代收付' as GateCategory,
+		SUM(SucceedAmt) TransAmt,
+		SUM(SucceedCnt) TransCnt,
+		SUM(CostAmt) CostAmt
+	from
+		#ActualTraCost
+	group by
+		ChannelNo
+),
+ActualPayCost as
 (
 	select 
 		Pay.GateNo,
@@ -127,22 +159,6 @@ B2BTransData as
 		GateNo
 ),
 --3.6 Prepare B2C Trans Data
-B2CAllTrans as
-(
-	select
-		GateNo,
-		MerchantNo,
-		GateCategory,
-		TransAmt,
-		TransCnt,
-		CostAmt
-	from
-		ActualPayCost
-	where
-		GateNo not in ('0044','0045')
-		and
-		GateCategory not in (N'代扣',N'B2B')
-),
 B2CNetBankTrans as
 (
 	select
@@ -153,25 +169,11 @@ B2CNetBankTrans as
 		TransCnt,
 		CostAmt
 	from
-		B2CAllTrans
+		ActualPayCost
 	where
-		GateCategory not in ('EPOS','UPOP')
+		GateNo not in ('0044','0045','5901','5902')
 		and
-		GateNo not in ('5901','5902')
-	--union all
-	--select
-	--	GateNo,
-	--	MerchantNo,
-	--	N'B2C网银' as GateCategory,
-	--	TransAmt,
-	--	TransCnt,
-	--	CostAmt
-	--from
-	--	B2CAllTrans
-	--where
-	--	GateCategory in ('EPOS') 
-	--	and
-	--	MerchantNo in (select MerchantNo from Table_EposTakeoffMerchant)
+		GateCategory not in ('EPOS','UPOP',N'代扣',N'B2B')
 ),
 DomesticTrans as
 (
@@ -203,49 +205,12 @@ OutsideTrans as
 	group by
 		GateNo
 ),
-OtherB2CTrans as
-(
-	select
-		AllTrans.GateNo,
-		N'支付B2C' as GateCategory,
-		(AllTrans.TransAmt - ISNULL(DomeTrans.TransAmt, 0)) TransAmt,
-		(AllTrans.TransCnt - ISNULL(DomeTrans.TransCnt, 0)) TransCnt,
-		(AllTrans.CostAmt - ISNULL(DomeTrans.CostAmt, 0)) CostAmt
-	from
-		(select
-			GateNo,
-			SUM(TransAmt) TransAmt,
-			SUM(TransCnt) TransCnt,
-			SUM(CostAmt) CostAmt
-		 from
-			B2CAllTrans
-		 group by
-			GateNo
-		)AllTrans
-		left join
-		(select
-			GateNo,
-			SUM(TransAmt) TransAmt,
-			SUM(TransCnt) TransCnt,
-			SUM(CostAmt) CostAmt
-		 from
-			B2CNetBankTrans
-		 group by
-			GateNo
-		)DomeTrans
-		on
-			AllTrans.GateNo = DomeTrans.GateNo
-	where
-		(AllTrans.TransAmt - ISNULL(DomeTrans.TransAmt, 0)) <> 0
-		or
-		(AllTrans.TransCnt - ISNULL(DomeTrans.TransCnt, 0)) <> 0
-		or
-		(AllTrans.CostAmt - ISNULL(DomeTrans.CostAmt, 0)) <> 0
-),
 --4.Join All Data
 AllTransData as
 (
 	select * from ActualOraCost
+	union all
+	select * from ActualNewOraCost
 	union all
 	select * from DeductionData
 	union all
@@ -273,8 +238,12 @@ WithCostRuleGate as
 		(Select distinct BankSettingID from Table_OraBankCostRule)OraCost
 		on
 			AllTransData.GateNo = OraCost.BankSettingID
+		left join
+		(Select distinct ChannelNo from Table_TraCostRuleByChannel)TraCost
+		on
+			AllTransData.GateNo = TraCost.ChannelNo
 	where
-		coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is not null
+		coalesce(GateCostRule.GateNo,OraCost.BankSettingID,TraCost.ChannelNo) is not null
 	group by
 		AllTransData.GateNo,
 		AllTransData.GateCategory
@@ -310,7 +279,7 @@ StdCostSum as
 select
 	GateCost.GateNo,
 	GateCost.GateCategory,
-	coalesce(Gate.GateDesc,Ora.BankName) GateName,
+	coalesce(Gate.GateDesc,Ora.BankName,Tra.ChannelName) GateName,
 	case when GateCost.GateCategory in (N'B2B',N'代收付')
 		 then 1 
 		 Else 0 End as Flag,
@@ -344,12 +313,18 @@ from
 	Table_OraBankSetting Ora
 	on
 		GateCost.GateNo = Ora.BankSettingID
+	left join
+	Table_TraChannelConfig Tra
+	on
+		GateCost.GateNo = Tra.ChannelNo
 where
 	(ISNULL(GateCost.StdCostAmt,0) - GateCost.ActCostAmt) <> 0
-order by
+order by	
+	GateCost.GateCategory,
 	GateCost.GateNo;
 	
 --4.Drop table
 Drop table #ActualPayCost;
 Drop table #ActualOraCost;
+Drop table #ActualTraCost;
 End

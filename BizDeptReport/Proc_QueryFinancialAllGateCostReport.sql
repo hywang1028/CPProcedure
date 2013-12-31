@@ -1,6 +1,7 @@
 --[Created] At 20120530 By 王红燕:金融考核报表之银行成本降低额明细表(境外数据已转为人民币数据)
 --[Modified] At 20120713 By 王红燕：Add All Bank Cost Calc Procs @HisRefDate Para Value
 --[Modified] At 20130419 By 王红燕：Modify Reference Cost to Standard Cost
+--[Modified] At 20131231 By 王红燕：Add New Tra Screen Trans and Cost
 if OBJECT_ID(N'Proc_QueryFinancialAllGateCostReport', N'P') is not null
 begin
 	drop procedure Proc_QueryFinancialAllGateCostReport;
@@ -24,8 +25,6 @@ declare @CurrStartDate datetime;
 declare @CurrEndDate datetime;
 set @CurrStartDate = @StartDate;
 set @CurrEndDate = DATEADD(day,1,@EndDate);
---declare @HisRefDate datetime;
---set @HisRefDate = DATEADD(DAY, -1, '2012-01-01');
 
 exec xprcFile '
 GateNo	GateDesc	GateFlag
@@ -126,7 +125,40 @@ insert into
 exec 
 	Proc_CalOraCost @CurrStartDate,@CurrEndDate,NULL;
 	
-With ActualPayCost as
+create table #ActualTraCost
+(	
+	MerchantNo char(15),
+	ChannelNo char(6),	
+	TransType varchar(20),	
+	CPDate date,
+	TotalCnt int,	
+	TotalAmt decimal(15,2),	
+	SucceedCnt int,	
+	SucceedAmt decimal(15,2),	
+	CalFeeCnt int,	
+	CalFeeAmt decimal(15,2),	
+	CalCostCnt int,	
+	CalCostAmt decimal(15,2),	
+	FeeAmt decimal(15,2),
+	CostAmt decimal(15,2)
+)
+insert into #ActualTraCost
+exec Proc_CalTraCost @CurrStartDate,@CurrEndDate;
+	
+With ActualNewOraCost as
+(
+	select
+		ChannelNo,
+		N'代收付' as GateCategory,
+		SUM(SucceedAmt) TransAmt,
+		SUM(SucceedCnt) TransCnt,
+		SUM(CostAmt) CostAmt
+	from
+		#ActualTraCost
+	group by
+		ChannelNo
+),
+ActualPayCost as
 (
 	select 
 		Pay.GateNo,
@@ -241,20 +273,6 @@ B2CNetBankTrans as
 		GateCategory not in ('EPOS','UPOP')
 		and
 		GateNo not in ('5901','5902')
-	--union all
-	--select
-	--	GateNo,
-	--	MerchantNo,
-	--	N'B2C网银' as GateCategory,
-	--	TransAmt,
-	--	TransCnt,
-	--	CostAmt
-	--from
-	--	B2CAllTrans
-	--where
-	--	GateCategory in ('EPOS') 
-	--	and
-	--	MerchantNo in (select MerchantNo from Table_EposTakeoffMerchant)
 ),
 DomesticTrans as
 (
@@ -330,6 +348,8 @@ AllTransData as
 (
 	select * from ActualOraCost
 	union all
+	select * from ActualNewOraCost
+	union all
 	select * from DeductionData
 	union all
 	select * from B2BTransData
@@ -393,23 +413,23 @@ StdCostRatio as
 select
 	GateCost.GateNo,
 	GateCost.GateCategory,
-	coalesce(Gate.GateDesc,Ora.BankName) GateName,
+	coalesce(Gate.GateDesc,Ora.BankName,Tra.ChannelName) GateName,
 	case when GateCost.GateCategory in (N'B2B',N'代收付')
 		 then 1 
 		 Else 0 End as Flag,
 	NoCostGate.GateDesc,
 	Convert(decimal,GateCost.TransAmt)/100.0 as TransAmt,
 	GateCost.TransCnt,
-	case when coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
+	case when coalesce(GateCostRule.GateNo,OraCost.BankSettingID,TraCost.ChannelNo) is null
 		 then 0 
 		 Else Convert(decimal,GateCost.ActCostAmt)/100.0 End as ActCostAmt,
-	case when coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
+	case when coalesce(GateCostRule.GateNo,OraCost.BankSettingID,TraCost.ChannelNo) is null
 		 then N'无实际成本规则' 
 	End as ActCostRatio,
-	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
+	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID,TraCost.ChannelNo) is null
 		 then 0
 		 Else Convert(decimal,GateCost.StdCostAmt)/100.0 End as StdCostAmt,
-	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
+	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID,TraCost.ChannelNo) is null
 		 then 0
 		 Else case when GateCost.GateCategory in (N'代收付')
 			       then 0.7
@@ -419,7 +439,7 @@ select
 				   then 0.0025
 				   Else GateCost.StdCostAmt/GateCost.TransAmt
 	End End as StdCostRatio,
-	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID) is null
+	case when NoCostGate.GateNo is not null or coalesce(GateCostRule.GateNo,OraCost.BankSettingID,TraCost.ChannelNo) is null
 		 then 0 
 		 when GateCost.StdCostAmt is null 
 		 then NULL
@@ -437,6 +457,10 @@ from
 	on
 		GateCost.GateNo = Ora.BankSettingID
 	left join
+	Table_TraChannelConfig Tra
+	on
+		GateCost.GateNo = Tra.ChannelNo
+	left join
 	#SpecialGateNo NoCostGate
 	on
 		GateCost.GateNo = NoCostGate.GateNo
@@ -452,13 +476,17 @@ from
 	(Select distinct BankSettingID from Table_OraBankCostRule)OraCost
 	on
 		GateCost.GateNo = OraCost.BankSettingID
---where
---	GateCost.GateNo <> '0044/0045'
+	left join
+	(Select distinct ChannelNo from Table_TraCostRuleByChannel)TraCost
+	on
+		GateCost.GateNo = TraCost.ChannelNo
 order by
+	GateCost.GateCategory,
 	GateCost.GateNo;
 	
 --4.Drop table
 Drop table #ActualPayCost;
 Drop table #ActualOraCost;
 Drop table #SpecialGateNo;
+Drop table #ActualTraCost;
 End
