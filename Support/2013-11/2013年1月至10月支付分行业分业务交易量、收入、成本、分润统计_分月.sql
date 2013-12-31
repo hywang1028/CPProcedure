@@ -96,6 +96,7 @@ select
 	pc.MerchantNo,
 	pc.MerchantNo as CpMerNo,
 	pc.BizCategory,
+	MONTH(pc.FeeEndDate) as Year_month,
 	
 	SUM(pc.TransCnt) as TransCnt,
 	SUM(pc.TransAmt) as TransAmt,
@@ -108,13 +109,15 @@ from
 	PaymentCost pc
 group by
 	pc.MerchantNo,
-	pc.BizCategory
+	pc.BizCategory,
+	MONTH(pc.FeeEndDate)
 union all
 select
 	N'Table_UpopliqFeeLiqResult' as plat,
 	ud.MerchantNo,
 	isnull((select CpMerNo from Table_CpUpopRelation where UpopMerNo = ud.MerchantNo),ud.MerchantNo) as CpMerNo,
 	N'UPOPÖ±Á¬' as BizCategory,
+	MONTH(ud.TransDate) as Year_month,
 	
 	SUM(TransCnt) as TransCnt,
 	SUM(TransAmt) as TransAmt,
@@ -124,7 +127,8 @@ select
 from
 	#UpopDirect ud
 group by
-	ud.MerchantNo;
+	ud.MerchantNo,
+	MONTH(ud.TransDate);
 
 select
 	ad.MerchantNo,
@@ -135,6 +139,7 @@ select
 	else
 		(select MerchantName from Table_UpopliqMerInfo where MerchantNo = ad.MerchantNo)
 	end as MerchantName,
+	Year_month,
 	ad.BizCategory,
 	coalesce(
 		(select IndustryName from Table_FinancialDeptConfiguration where MerchantNo = ad.CpMerNo),
