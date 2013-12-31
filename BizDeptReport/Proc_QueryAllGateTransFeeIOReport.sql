@@ -3,6 +3,7 @@
 --Output:全网关列表,网关名称,业务类型,交易金额（亿元）,占比,交易笔数（万笔）,占比,收入（万元）,占比,收入率,银行成本（万元）,占比,银行成本率
 
 --Modified By Richard Wu 2013-07-23 Use Proc_GetPaymentCost replace Proc_CalPaymentCost
+--Modified By 王红燕 2013-12-31 Use Proc_CalPaymentCost replace Proc_GetPaymentCost
 
 if OBJECT_ID(N'Proc_QueryAllGateTransFeeIOReport', N'P') is not null
 begin
@@ -68,7 +69,7 @@ create table #CurrPayCost
 insert into 
 	#CurrPayCost
 exec 
-	Proc_GetPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
+	Proc_CalPaymentCost @CurrStartDate,@CurrEndDate,NULL,'on';
 	
 --Current UPOP Liq Trans
 create table #UPOPCostAndFeeData
